@@ -8,7 +8,7 @@ WORKDIR /usr/src/app
 COPY Cargo.toml Cargo.lock ./
 
 # Cache dependencies - this will only re-run if your manifest files change
-RUN cargo fetch
+# RUN cargo fetch
 
 # Copy your source code
 COPY src ./src
