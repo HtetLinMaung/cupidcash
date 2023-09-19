@@ -25,5 +25,7 @@ RUN apt-get update && apt-get install -y libpq5 && rm -rf /var/lib/apt/lists/*
 # Copy over the built binary file from the builder stage
 COPY --from=builder /usr/src/app/target/release/cupidcash /usr/local/bin/
 
+COPY images /images
+
 # Set the start command
 CMD ["cupidcash"]
