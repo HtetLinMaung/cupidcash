@@ -9,7 +9,7 @@ services:
     #   - db
     environment:
       - "DB_CONNECTION=host=localhost user=postgres password=<password> dbname=<dbname>"
-      - JWT_SECRET=0b84221cadfd321e547f74fc5b4940b1bb31bf2d58a411b3454c9b2908a1bf30JWT_SECRET=0b84221cadfd321e547f74fc5b4940b1bb31bf2d58a411b3454c9b2908a1bf30
+      - JWT_SECRET=<secret>
 
   # db:
   #   image: postgres:13
