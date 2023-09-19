@@ -3,13 +3,23 @@ CREATE TABLE shops (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     address TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP DEFAULT null
 );
+
+INSERT INTO shops (name, address, created_at) VALUES
+('Café Central', '123 Main St, CityCenter, CountryXYZ', '2023-09-20 10:00:00'),
+('Bistro Corner', '456 Oak Road, Suburbia, CountryXYZ', '2023-09-15 11:30:00'),
+('Green Delight Restaurant', '789 Pine Avenue, GreenValley, CountryXYZ', '2023-09-01 09:00:00'),
+('Harbor Cafe', '101 Seaside Blvd, Beachtown, CountryXYZ', '2023-08-25 14:00:00'),
+('Mountain Brews', '202 Hilltop Drive, Highland, CountryXYZ', '2023-09-10 08:00:00');
+
 
 -- Roles Table
 CREATE TABLE roles (
     id SERIAL PRIMARY KEY,
-    role_name VARCHAR(50) NOT NULL UNIQUE
+    role_name VARCHAR(50) NOT NULL UNIQUE,
+    deleted_at TIMESTAMP DEFAULT null
 );
 
 -- Insert roles into the Roles Table
@@ -18,12 +28,16 @@ INSERT INTO roles (role_name) VALUES ('Admin'), ('Manager'), ('Waiter');
 -- Users Table
 CREATE TABLE users (
     id SERIAL PRIMARY KEY,
+    name varchar(255) not null,
     username VARCHAR(100) UNIQUE NOT NULL,
     password TEXT NOT NULL,  -- ensure it's hashed in application logic
     role_id INTEGER REFERENCES roles(id),
     shop_id INTEGER REFERENCES shops(id),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP DEFAULT null
 );
+
+insert into users (username, password, name, role_id, shop_id, created_at) values ('waiter001', '$2b$12$ZQ9xFoR3ve/kjfoMeGuoLO93USM5q.z08or2Z2HMuH0BlS7bTfyTm', 'Waiter 001', 3, 2, now());
 
 -- Categories Table
 CREATE TABLE categories (
@@ -31,8 +45,17 @@ CREATE TABLE categories (
     name VARCHAR(255) NOT NULL,
     description TEXT,
     shop_id INTEGER REFERENCES shops(id),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP DEFAULT null
 );
+
+INSERT INTO categories (name, description, shop_id, created_at) VALUES
+('Appetizers', 'Start your meal off right with our selection of appetizers.', 2, '2023-09-15 12:00:00'),
+('Main Courses', 'From steaks to pasta, explore our variety of hearty dishes.', 2, '2023-09-15 12:10:00'),
+('Desserts', 'Satisfy your sweet tooth with our delicious desserts.', 2, '2023-09-15 12:20:00'),
+('Beverages', 'Quench your thirst with our range of drinks.', 2, '2023-09-15 12:30:00'),
+('Vegan Options', 'A selection of dishes curated for our vegan patrons.', 2, '2023-09-15 12:40:00');
+
 
 -- Items (Menu Items) Table with category reference and image
 CREATE TABLE items (
@@ -43,7 +66,8 @@ CREATE TABLE items (
     category_id INTEGER REFERENCES categories(id),
     image_url TEXT,  -- This can store the URL of the image if hosted externally
     shop_id INTEGER REFERENCES shops(id),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP DEFAULT null
 );
 
 
@@ -53,7 +77,8 @@ CREATE TABLE tables (
     table_number INTEGER NOT NULL,
     qr_code TEXT,  -- if storing QR code data
     shop_id INTEGER REFERENCES shops(id),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP DEFAULT null
 );
 
 -- Orders Table
@@ -61,7 +86,8 @@ CREATE TABLE orders (
     id SERIAL PRIMARY KEY,
     waiter_id INTEGER REFERENCES users(id),
     table_id INTEGER REFERENCES tables(id),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP DEFAULT null
 );
 
 -- Order Items (link between orders and items) Table
@@ -81,7 +107,8 @@ CREATE TABLE transaction_reports (
     total_revenue DECIMAL(10, 2),
     num_orders INTEGER,
     popular_item_id INTEGER REFERENCES items(id),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP DEFAULT null
 );
 
 -- Future tables (like feedback, loyalty programs) can be added based on requirements
