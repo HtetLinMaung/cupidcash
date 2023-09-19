@@ -2,6 +2,7 @@ extern crate dotenv;
 
 use std::{env, sync::Arc};
 
+use actix_files as fs;
 use actix_web::{web, App, HttpServer};
 use dotenv::dotenv;
 use tokio_postgres::NoTls;
@@ -37,6 +38,7 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .app_data(web::Data::new(client.clone()))
             .configure(api::init)
+            .service(fs::Files::new("/images", "./images").show_files_listing())
     })
     .bind(("0.0.0.0", port))?
     .run()

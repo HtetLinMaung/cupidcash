@@ -70,6 +70,17 @@ CREATE TABLE items (
     deleted_at TIMESTAMP DEFAULT null
 );
 
+-- Sample data for items table
+INSERT INTO items (name, description, price, category_id, image_url, shop_id) VALUES 
+('Espresso', 'Strong coffee without milk', 2.50, 4, '/images/espresso.jpeg', 2),
+('Cappuccino', 'Coffee with frothy milk on top', 3.00, 4, '/images/espresso.jpeg', 2),
+('Green Salad', 'Mixed greens with vinaigrette', 5.50, 4, '/images/espresso.jpeg', 2),
+('Cheese Burger', 'Burger with cheese and lettuce', 7.00, 4, '/images/espresso.jpeg', 2),
+('Spaghetti Carbonara', 'Creamy pasta with bacon bits', 8.50, 4, '/images/espresso.jpeg', 2),
+('Lemon Tart', 'Tangy lemon dessert', 4.50, 4, '/images/espresso.jpeg', 2),
+('Mineral Water', 'Sparkling water in a bottle', 1.50, 4, '/images/espresso.jpeg', 2);
+
+
 
 -- Tables (Restaurant Tables) Table
 CREATE TABLE tables (
@@ -80,6 +91,18 @@ CREATE TABLE tables (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     deleted_at TIMESTAMP DEFAULT null
 );
+
+INSERT INTO tables (table_number, qr_code, shop_id, created_at) VALUES 
+(1, '', 2, '2023-09-19 10:00:00'),
+(2, '', 2, '2023-09-19 10:05:00'),
+(3, '', 2, '2023-09-19 10:10:00'),
+(4, '', 2, '2023-09-19 10:15:00'),
+(5, '', 2, '2023-09-19 10:20:00'),
+(6, '', 2, '2023-09-19 10:25:00'),
+(7, '', 2, '2023-09-19 10:30:00'),
+(8, '', 2, '2023-09-19 10:35:00'),
+(9, '', 2, '2023-09-19 10:40:00'),
+(10, '', 2, '2023-09-19 10:45:00');
 
 -- Orders Table
 CREATE TABLE orders (

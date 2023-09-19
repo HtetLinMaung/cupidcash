@@ -1,6 +1,8 @@
 use std::env;
 
-use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation, Algorithm, errors::ErrorKind};
+use jsonwebtoken::{
+    decode, encode, errors::ErrorKind, Algorithm, DecodingKey, EncodingKey, Header, Validation,
+};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -18,19 +20,19 @@ pub fn sign_token(claims: &Claims) -> Result<String, jsonwebtoken::errors::Error
     )
 }
 
-pub fn verify_token(token: &str) -> bool {
-    let secret = env::var("JWT_SECRET").expect("JWT_SECRET must be set");
+// pub fn verify_token(token: &str) -> bool {
+//     let secret = env::var("JWT_SECRET").expect("JWT_SECRET must be set");
 
-    let validation = Validation::default();
-    match decode::<Claims>(
-        &token,
-        &DecodingKey::from_secret(secret.as_ref()),
-        &validation,
-    ) {
-        Ok(_) => true,   // Token is valid
-        Err(_) => false, // Token is invalid
-    }
-}
+//     let validation = Validation::default();
+//     match decode::<Claims>(
+//         &token,
+//         &DecodingKey::from_secret(secret.as_ref()),
+//         &validation,
+//     ) {
+//         Ok(_) => true,   // Token is valid
+//         Err(_) => false, // Token is invalid
+//     }
+// }
 
 pub fn verify_token_and_get_sub(token: &str) -> Option<String> {
     let secret = env::var("JWT_SECRET").expect("JWT_SECRET must be set");

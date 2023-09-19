@@ -9,9 +9,6 @@ pub struct Category {
     pub id: i32,
     pub name: String,
     pub description: String,
-    // pub shop_id: i32,
-    // pub created_at: chrono::NaiveDateTime,
-    // pub deleted_at: Option<chrono::NaiveDateTime>,
 }
 
 pub async fn get_categories(
@@ -20,7 +17,7 @@ pub async fn get_categories(
 ) -> Result<Vec<Category>, tokio_postgres::Error> {
     let rows = client
         .query(
-            "select id, name, description from categories where deleted_at is null and shop_id = $1",
+            "select id, name, description from categories where deleted_at is null and shop_id = $1 order by name, id desc",
             &[&shop_id],
         )
         .await?;
