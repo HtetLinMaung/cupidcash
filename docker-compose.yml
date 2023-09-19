@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  web:
+    build: .
+    ports:
+      - "8000:8000"
+    # depends_on:
+    #   - db
+    environment:
+      - "DB_CONNECTION=host=localhost user=postgres password=<password> dbname=<dbname>"
+      - JWT_SECRET=0b84221cadfd321e547f74fc5b4940b1bb31bf2d58a411b3454c9b2908a1bf30JWT_SECRET=0b84221cadfd321e547f74fc5b4940b1bb31bf2d58a411b3454c9b2908a1bf30
+
+  # db:
+  #   image: postgres:13
+  #   ports:
+  #     - "5432:5432"
+  #   environment:
+  #     POSTGRES_USER: user
+  #     POSTGRES_PASSWORD: password
+  #     POSTGRES_DB: mydatabase
+  #   volumes:
+  #     - pgdata:/var/lib/postgresql/data
+
+# volumes:
+#   pgdata:
