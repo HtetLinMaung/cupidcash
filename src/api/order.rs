@@ -1,5 +1,5 @@
 use actix_web::{get, post, web, HttpRequest, HttpResponse, Responder};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::{sync::Arc, vec};
 use tokio_postgres::Client;
 
@@ -81,10 +81,24 @@ pub struct GetOrderResponse {
     pub code: u16,
     pub message: String,
     pub data: Vec<Order>,
+    pub total: i64,
+    pub page: u32,
+    pub per_page: u32,
+    pub page_counts: usize,
+}
+
+#[derive(Deserialize)]
+pub struct GetOrdersQuery {
+    pub page: Option<u32>,
+    pub per_page: Option<u32>,
 }
 
 #[get("/api/orders")]
-pub async fn get_orders(req: HttpRequest, client: web::Data<Arc<Client>>) -> impl Responder {
+pub async fn get_orders(
+    req: HttpRequest,
+    query: web::Query<GetOrdersQuery>,
+    client: web::Data<Arc<Client>>,
+) -> impl Responder {
     // Extract the token from the Authorization header
     let token = match req.headers().get("Authorization") {
         Some(value) => {
@@ -96,6 +110,10 @@ pub async fn get_orders(req: HttpRequest, client: web::Data<Arc<Client>>) -> imp
                     code: 400,
                     message: String::from("Invalid Authorization header format"),
                     data: vec![],
+                    total: 0,
+                    page: 0,
+                    per_page: 0,
+                    page_counts: 0,
                 });
             }
         }
@@ -104,6 +122,10 @@ pub async fn get_orders(req: HttpRequest, client: web::Data<Arc<Client>>) -> imp
                 code: 401,
                 message: String::from("Authorization header missing"),
                 data: vec![],
+                total: 0,
+                page: 0,
+                per_page: 0,
+                page_counts: 0,
             })
         }
     };
@@ -115,6 +137,10 @@ pub async fn get_orders(req: HttpRequest, client: web::Data<Arc<Client>>) -> imp
                 code: 401,
                 message: String::from("Invalid token"),
                 data: vec![],
+                total: 0,
+                page: 0,
+                per_page: 0,
+                page_counts: 0,
             })
         }
     };
@@ -126,6 +152,10 @@ pub async fn get_orders(req: HttpRequest, client: web::Data<Arc<Client>>) -> imp
             code: 500,
             message: String::from("Invalid sub format in token"),
             data: vec![],
+            total: 0,
+            page: 0,
+            per_page: 0,
+            page_counts: 0,
         });
     }
 
@@ -133,16 +163,33 @@ pub async fn get_orders(req: HttpRequest, client: web::Data<Arc<Client>>) -> imp
     let role_name: &str = parsed_values[1];
     let shop_id: i32 = parsed_values[2].parse().unwrap();
 
-    match order::get_orders(shop_id, user_id, role_name, &client).await {
-        Ok(orders) => HttpResponse::Ok().json(GetOrderResponse {
+    match order::get_orders(
+        shop_id,
+        user_id,
+        role_name,
+        &query.page,
+        &query.per_page,
+        &client,
+    )
+    .await
+    {
+        Ok(order_result) => HttpResponse::Ok().json(GetOrderResponse {
             code: 200,
             message: String::from("Successful."),
-            data: orders,
+            data: order_result.orders,
+            total: order_result.total,
+            page: order_result.page,
+            per_page: order_result.per_page,
+            page_counts: order_result.page_counts,
         }),
         _ => HttpResponse::InternalServerError().json(GetOrderResponse {
             code: 500,
             message: String::from("Error trying to read all orders from database"),
             data: vec![],
+            total: 0,
+            page: 0,
+            per_page: 0,
+            page_counts: 0,
         }),
     }
 }

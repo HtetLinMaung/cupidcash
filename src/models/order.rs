@@ -3,7 +3,7 @@
 use chrono::NaiveDateTime;
 // use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
-use tokio_postgres::{Client, Error};
+use tokio_postgres::{types::ToSql, Client, Error};
 
 #[derive(Deserialize, Debug)]
 pub struct NewOrder {
@@ -52,28 +52,66 @@ pub struct Order {
     created_at: NaiveDateTime,
 }
 
+pub struct GetOrdersResult {
+    pub orders: Vec<Order>,
+    pub total: i64,
+    pub page: u32,
+    pub per_page: u32,
+    pub page_counts: usize,
+}
+
 pub async fn get_orders(
     shop_id: i32,
     user_id: i32,
     role: &str,
+    page: &Option<u32>,
+    per_page: &Option<u32>,
     client: &Client,
-) -> Result<Vec<Order>, Error> {
-    // Query depends on role
-    let rows = match role {
-        "Manager" => client.query("select o.id, u.name as waiter_name, t.table_number, o.created_at from orders o inner join users u on u.id = o.waiter_id inner join tables t on o.table_id = t.id where u.deleted_at is null and o.deleted_at is null and t.deleted_at is null and t.shop_id = $1 order by o.created_at desc", &[&shop_id]).await?,
-        "Waiter" => client.query("select o.id, u.name as waiter_name, t.table_number, o.created_at from orders o inner join users u on u.id = o.waiter_id inner join tables t on o.table_id = t.id where u.deleted_at is null and o.deleted_at is null and t.deleted_at is null and t.shop_id = $1 and o.waiter_id = $2 order by o.created_at desc", &[&shop_id, &user_id]).await?,
-        _ => client.query("select o.id, u.name as waiter_name, t.table_number, o.created_at from orders o inner join users u on u.id = o.waiter_id inner join tables t on o.table_id = t.id where u.deleted_at is null and o.deleted_at is null and t.deleted_at is null and o.waiter_id = $2 order by o.created_at desc", &[]).await?
-    };
+) -> Result<GetOrdersResult, Error> {
+    let mut params: Vec<Box<dyn ToSql + Sync>> = vec![];
+    let mut sql = "select o.id, u.name as waiter_name, t.table_number, o.created_at from orders o inner join users u on u.id = o.waiter_id inner join tables t on o.table_id = t.id where u.deleted_at is null and o.deleted_at is null and t.deleted_at is null".to_string();
+    let mut count_sql = "select count(*) as total from orders o inner join users u on u.id = o.waiter_id inner join tables t on o.table_id = t.id where u.deleted_at is null and o.deleted_at is null and t.deleted_at is null".to_string();
+    if role == "Manager" {
+        params.push(Box::new(shop_id));
+        sql = format!("{sql} and t.shop_id = $1");
+        count_sql = format!("{count_sql} and t.shop_id = $1");
+    } else if role == "Waiter" {
+        params.push(Box::new(shop_id));
+        params.push(Box::new(user_id));
+        sql = format!("{sql} and t.shop_id = $1 and o.waiter_id = $2");
+        count_sql = format!("{count_sql} and t.shop_id = $1 and o.waiter_id = $2");
+    }
+    sql = format!("{sql} order by o.created_at desc");
+    let mut current_page = 0;
+    let mut limit = 0;
+    let mut page_counts = 0;
+    let params_slice: Vec<&(dyn ToSql + Sync)> = params.iter().map(AsRef::as_ref).collect();
+    let row = client.query_one(&count_sql, &params_slice).await?;
+    let total: i64 = row.get("total");
+    if page.is_some() && per_page.is_some() {
+        current_page = page.unwrap();
+        limit = per_page.unwrap();
+        let offset = (current_page - 1) * limit;
+        sql = format!("{sql} limit {limit} offset {offset}");
+        page_counts = (total as f64 / f64::from(limit)).ceil() as usize;
+    }
+    let rows = client.query(&sql, &params_slice).await?;
 
-    Ok(rows
-        .into_iter()
-        .map(|row| Order {
-            id: row.get("id"),
-            waiter_name: row.get("waiter_name"),
-            table_number: row.get("table_number"),
-            created_at: row.get("created_at"),
-        })
-        .collect())
+    Ok(GetOrdersResult {
+        orders: rows
+            .into_iter()
+            .map(|row| Order {
+                id: row.get("id"),
+                waiter_name: row.get("waiter_name"),
+                table_number: row.get("table_number"),
+                created_at: row.get("created_at"),
+            })
+            .collect(),
+        total: row.get("total"),
+        page: current_page,
+        per_page: limit,
+        page_counts,
+    })
 }
 
 #[derive(Serialize)]
