@@ -1,6 +1,6 @@
 // use std::time::SystemTime;
 
-use chrono::NaiveDateTime;
+use chrono::{NaiveDate, NaiveDateTime};
 // use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use tokio_postgres::{types::ToSql, Client, Error};
@@ -66,6 +66,8 @@ pub async fn get_orders(
     role: &str,
     page: &Option<u32>,
     per_page: &Option<u32>,
+    from_date: &Option<NaiveDate>,
+    to_date: &Option<NaiveDate>,
     client: &Client,
 ) -> Result<GetOrdersResult, Error> {
     let mut params: Vec<Box<dyn ToSql + Sync>> = vec![];
@@ -81,7 +83,22 @@ pub async fn get_orders(
         sql = format!("{sql} and t.shop_id = $1 and o.waiter_id = $2");
         count_sql = format!("{count_sql} and t.shop_id = $1 and o.waiter_id = $2");
     }
+    if from_date.is_some() && to_date.is_some() {
+        params.push(Box::new(from_date.unwrap()));
+        params.push(Box::new(to_date.unwrap()));
+        sql = format!(
+            "{sql} and o.created_at::date between ${} and ${}",
+            params.len() - 1,
+            params.len()
+        );
+        count_sql = format!(
+            "{count_sql} and o.created_at::date between ${} and ${}",
+            params.len() - 1,
+            params.len()
+        );
+    }
     sql = format!("{sql} order by o.created_at desc");
+
     let mut current_page = 0;
     let mut limit = 0;
     let mut page_counts = 0;
@@ -107,7 +124,7 @@ pub async fn get_orders(
                 created_at: row.get("created_at"),
             })
             .collect(),
-        total: row.get("total"),
+        total,
         page: current_page,
         per_page: limit,
         page_counts,

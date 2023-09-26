@@ -14,12 +14,18 @@ pub struct GetItemsResponse {
     pub code: u16,
     pub message: String,
     pub data: Vec<Item>,
+    pub total: i64,
+    pub page: u32,
+    pub per_page: u32,
+    pub page_counts: usize,
 }
 
 #[derive(Deserialize)]
 pub struct GetItemsQuery {
     pub search: Option<String>,
     pub category_id: Option<i32>,
+    pub page: Option<u32>,
+    pub per_page: Option<u32>,
 }
 
 #[get("/api/items")]
@@ -39,6 +45,10 @@ pub async fn get_items(
                     code: 400,
                     message: String::from("Invalid Authorization header format"),
                     data: vec![],
+                    total: 0,
+                    page: 0,
+                    per_page: 0,
+                    page_counts: 0,
                 });
             }
         }
@@ -47,6 +57,10 @@ pub async fn get_items(
                 code: 401,
                 message: String::from("Authorization header missing"),
                 data: vec![],
+                total: 0,
+                page: 0,
+                per_page: 0,
+                page_counts: 0,
             })
         }
     };
@@ -58,6 +72,10 @@ pub async fn get_items(
                 code: 401,
                 message: String::from("Invalid token"),
                 data: vec![],
+                total: 0,
+                page: 0,
+                per_page: 0,
+                page_counts: 0,
             })
         }
     };
@@ -69,22 +87,47 @@ pub async fn get_items(
             code: 500,
             message: String::from("Invalid sub format in token"),
             data: vec![],
+            total: 0,
+            page: 0,
+            per_page: 0,
+            page_counts: 0,
         });
     }
 
     // let user_id: &str = parsed_values[0];
     // let role_name: &str = parsed_values[1];
     let shop_id: i32 = parsed_values[2].parse().unwrap();
-    match item::get_items(shop_id, &query.search, &query.category_id, &client).await {
-        Ok(items) => HttpResponse::Ok().json(GetItemsResponse {
+    match item::get_items(
+        shop_id,
+        &query.search,
+        &query.category_id,
+        &query.page,
+        &query.per_page,
+        &client,
+    )
+    .await
+    {
+        Ok(item_result) => HttpResponse::Ok().json(GetItemsResponse {
             code: 200,
             message: String::from("Successful."),
-            data: items,
+            data: item_result.items,
+            total: item_result.total,
+            page: item_result.page,
+            per_page: item_result.per_page,
+            page_counts: item_result.page_counts,
         }),
-        _ => HttpResponse::InternalServerError().json(GetItemsResponse {
-            code: 500,
-            message: String::from("Error trying to read all items from database"),
-            data: vec![],
-        }),
+        Err(err) => {
+            // Log the error message here
+            println!("Error retrieving items: {:?}", err);
+            HttpResponse::InternalServerError().json(GetItemsResponse {
+                code: 500,
+                message: String::from("Error trying to read all items from database"),
+                data: vec![],
+                total: 0,
+                page: 0,
+                per_page: 0,
+                page_counts: 0,
+            })
+        }
     }
 }

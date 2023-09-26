@@ -1,4 +1,5 @@
 use actix_web::{get, post, web, HttpRequest, HttpResponse, Responder};
+use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
 use std::{sync::Arc, vec};
 use tokio_postgres::Client;
@@ -91,6 +92,8 @@ pub struct GetOrderResponse {
 pub struct GetOrdersQuery {
     pub page: Option<u32>,
     pub per_page: Option<u32>,
+    pub from_date: Option<NaiveDate>,
+    pub to_date: Option<NaiveDate>,
 }
 
 #[get("/api/orders")]
@@ -169,6 +172,8 @@ pub async fn get_orders(
         role_name,
         &query.page,
         &query.per_page,
+        &query.from_date,
+        &query.to_date,
         &client,
     )
     .await
@@ -182,15 +187,19 @@ pub async fn get_orders(
             per_page: order_result.per_page,
             page_counts: order_result.page_counts,
         }),
-        _ => HttpResponse::InternalServerError().json(GetOrderResponse {
-            code: 500,
-            message: String::from("Error trying to read all orders from database"),
-            data: vec![],
-            total: 0,
-            page: 0,
-            per_page: 0,
-            page_counts: 0,
-        }),
+        Err(err) => {
+            // Log the error message here
+            println!("Error retrieving orders: {:?}", err);
+            HttpResponse::InternalServerError().json(GetOrderResponse {
+                code: 500,
+                message: String::from("Error trying to read all orders from database"),
+                data: vec![],
+                total: 0,
+                page: 0,
+                per_page: 0,
+                page_counts: 0,
+            })
+        }
     }
 }
 
