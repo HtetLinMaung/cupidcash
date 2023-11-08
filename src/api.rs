@@ -1,5 +1,6 @@
 mod auth;
 mod category;
+mod image;
 mod item;
 mod order;
 mod table;
