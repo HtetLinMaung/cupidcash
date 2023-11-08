@@ -55,6 +55,7 @@ pub struct Order {
     id: i32,
     waiter_name: String,
     table_number: i32,
+    status: String,
     created_at: NaiveDateTime,
 }
 
@@ -95,7 +96,7 @@ pub async fn get_orders(
 
     let order_options = "o.created_at desc";
     let result = generate_pagination_query(PaginationOptions {
-        select_columns: "o.id, u.name as waiter_name, t.table_number, o.created_at",
+        select_columns: "o.id, u.name as waiter_name, t.table_number, o.status, o.created_at",
         base_query: &base_query,
         search_columns: vec!["u.name"],
         search: search.as_deref(),
@@ -126,6 +127,7 @@ pub async fn get_orders(
             id: row.get("id"),
             waiter_name: row.get("waiter_name"),
             table_number: row.get("table_number"),
+            status: row.get("status"),
             created_at: row.get("created_at"),
         })
         .collect();
