@@ -1,6 +1,11 @@
 use std::option::Option;
 use tokio_postgres::{types::ToSql, Client, Error};
 
+use crate::utils::{
+    common_struct::PaginationResult,
+    sql::{generate_pagination_query, PaginationOptions},
+};
+
 #[derive(serde::Serialize)]
 pub struct Item {
     pub id: i32,
@@ -19,48 +24,49 @@ pub struct GetItemsResult {
 }
 
 pub async fn get_items(
+    search: &Option<String>,
+    page: Option<usize>,
+    per_page: Option<usize>,
     shop_id: i32,
-    name: &Option<String>,
-    category_id: &Option<i32>,
-    page: &Option<u32>,
-    per_page: &Option<u32>,
+    category_id: Option<i32>,
     client: &Client,
-) -> Result<GetItemsResult, Error> {
-    let mut query =
-        "select id, name, description, price::text, image_url from items where shop_id = $1 and deleted_at is null".to_string();
-    let mut count_sql = String::from(
-        "select count(*) as total from items where shop_id = $1 and deleted_at is null",
-    );
+) -> Result<PaginationResult<Item>, Error> {
+    let mut base_query = "from items where shop_id = $1 and deleted_at is null".to_string();
     let mut params: Vec<Box<dyn ToSql + Sync>> = vec![Box::new(shop_id)];
-    if let Some(n) = name {
-        query = format!("{query} and name like '%{n}%'");
-        count_sql = format!("{count_sql} and name like '%{n}%'");
-    }
 
     if let Some(c) = category_id {
-        query = format!("{} and category_id = $2", query);
-        count_sql = format!("{count_sql} and category_id = $2");
         params.push(Box::new(c));
+        base_query = format!("{base_query} and category_id = ${}", params.len());
     }
 
-    query = format!("{} order by name, id desc", query);
+    let order_options = "name, id desc";
 
+    let result = generate_pagination_query(PaginationOptions {
+        select_columns: "id, name, description, price::text, image_url",
+        base_query: &base_query,
+        search_columns: vec!["name"],
+        search: search.as_deref(),
+        order_options: Some(&order_options),
+        page,
+        per_page,
+    });
+
+    let params_slice: Vec<&(dyn ToSql + Sync)> = params.iter().map(AsRef::as_ref).collect();
+
+    let row = client.query_one(&result.count_query, &params_slice).await?;
+    let total: i64 = row.get("total");
+
+    let mut page_counts = 0;
     let mut current_page = 0;
     let mut limit = 0;
-    let mut page_counts = 0;
-    let params_slice: Vec<&(dyn ToSql + Sync)> = params.iter().map(AsRef::as_ref).collect();
-    let row = client.query_one(&count_sql, &params_slice).await?;
-    let total: i64 = row.get("total");
     if page.is_some() && per_page.is_some() {
         current_page = page.unwrap();
         limit = per_page.unwrap();
-        let offset = (current_page - 1) * limit;
-        query = format!("{query} limit {limit} offset {offset}");
-        page_counts = (total as f64 / f64::from(limit)).ceil() as usize;
+        page_counts = (total as f64 / limit as f64).ceil() as usize;
     }
 
     let items: Vec<Item> = client
-        .query(&query, &params_slice[..])
+        .query(&result.query, &params_slice)
         .await?
         .iter()
         .map(|row| {
@@ -76,8 +82,8 @@ pub async fn get_items(
         })
         .collect();
 
-    Ok(GetItemsResult {
-        items,
+    Ok(PaginationResult {
+        data: items,
         total,
         page: current_page,
         per_page: limit,

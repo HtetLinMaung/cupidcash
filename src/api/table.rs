@@ -1,19 +1,14 @@
-use std::{sync::Arc, vec};
+use std::sync::Arc;
 
 use crate::{
-    models::table::{self, Table},
-    utils::jwt::verify_token_and_get_sub,
+    models::table::{self},
+    utils::{
+        common_struct::{BaseResponse, DataResponse},
+        jwt::verify_token_and_get_sub,
+    },
 };
 use actix_web::{get, web, HttpRequest, HttpResponse, Responder};
-use serde::Serialize;
 use tokio_postgres::Client;
-
-#[derive(Serialize)]
-pub struct GetTablesResponse {
-    pub code: u16,
-    pub message: String,
-    pub data: Vec<Table>,
-}
 
 #[get("/api/tables")]
 pub async fn get_tables(req: HttpRequest, client: web::Data<Arc<Client>>) -> impl Responder {
@@ -24,18 +19,16 @@ pub async fn get_tables(req: HttpRequest, client: web::Data<Arc<Client>>) -> imp
             if parts.len() == 2 && parts[0] == "Bearer" {
                 parts[1]
             } else {
-                return HttpResponse::BadRequest().json(GetTablesResponse {
+                return HttpResponse::BadRequest().json(BaseResponse {
                     code: 400,
                     message: String::from("Invalid Authorization header format"),
-                    data: vec![],
                 });
             }
         }
         None => {
-            return HttpResponse::Unauthorized().json(GetTablesResponse {
+            return HttpResponse::Unauthorized().json(BaseResponse {
                 code: 401,
                 message: String::from("Authorization header missing"),
-                data: vec![],
             })
         }
     };
@@ -43,10 +36,9 @@ pub async fn get_tables(req: HttpRequest, client: web::Data<Arc<Client>>) -> imp
     let sub = match verify_token_and_get_sub(token) {
         Some(s) => s,
         None => {
-            return HttpResponse::Unauthorized().json(GetTablesResponse {
+            return HttpResponse::Unauthorized().json(BaseResponse {
                 code: 401,
                 message: String::from("Invalid token"),
-                data: vec![],
             })
         }
     };
@@ -54,10 +46,9 @@ pub async fn get_tables(req: HttpRequest, client: web::Data<Arc<Client>>) -> imp
     // Parse the `sub` value
     let parsed_values: Vec<&str> = sub.split(',').collect();
     if parsed_values.len() != 3 {
-        return HttpResponse::InternalServerError().json(GetTablesResponse {
+        return HttpResponse::InternalServerError().json(BaseResponse {
             code: 500,
             message: String::from("Invalid sub format in token"),
-            data: vec![],
         });
     }
 
@@ -65,15 +56,14 @@ pub async fn get_tables(req: HttpRequest, client: web::Data<Arc<Client>>) -> imp
     // let role_name: &str = parsed_values[1];
     let shop_id: i32 = parsed_values[2].parse().unwrap();
     match table::get_tables(shop_id, &client).await {
-        Ok(tables) => HttpResponse::Ok().json(GetTablesResponse {
+        Ok(tables) => HttpResponse::Ok().json(DataResponse {
             code: 200,
             message: String::from("Successful."),
-            data: tables,
+            data: Some(tables),
         }),
-        _ => HttpResponse::InternalServerError().json(GetTablesResponse {
+        _ => HttpResponse::InternalServerError().json(BaseResponse {
             code: 500,
             message: String::from("Error trying to read all tables from database"),
-            data: vec![],
         }),
     }
 }

@@ -5,6 +5,11 @@ use chrono::{NaiveDate, NaiveDateTime};
 use serde::{Deserialize, Serialize};
 use tokio_postgres::{types::ToSql, Client, Error};
 
+use crate::utils::{
+    common_struct::PaginationResult,
+    sql::{generate_pagination_query, PaginationOptions},
+};
+
 #[derive(Deserialize, Debug)]
 pub struct NewOrder {
     pub table_id: i32,
@@ -22,17 +27,18 @@ pub async fn create_order(
     waiter_id: i32,
     order: NewOrder,
     client: &Client,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<i32, Box<dyn std::error::Error>> {
     // Here, implement logic to insert the order into the database.
     // This might involve multiple insert statements: one for the order and then multiple for the items in the order.
 
     // Sample (you'd need to adapt this to your schema and logic)
-    client
-        .execute(
-            "insert into orders (table_id, waiter_id) values ($1, $2)",
+    let row = client
+        .query_one(
+            "insert into orders (table_id, waiter_id) values ($1, $2) returning id",
             &[&order.table_id, &waiter_id],
         )
         .await?;
+    let id: i32 = row.get("id");
 
     for item in order.items {
         client.execute(
@@ -41,7 +47,7 @@ pub async fn create_order(
         ).await?;
     }
 
-    Ok(())
+    Ok(id)
 }
 
 #[derive(Serialize)]
@@ -52,78 +58,80 @@ pub struct Order {
     created_at: NaiveDateTime,
 }
 
-pub struct GetOrdersResult {
-    pub orders: Vec<Order>,
-    pub total: i64,
-    pub page: u32,
-    pub per_page: u32,
-    pub page_counts: usize,
-}
-
 pub async fn get_orders(
+    search: &Option<String>,
+    page: Option<usize>,
+    per_page: Option<usize>,
     shop_id: i32,
     user_id: i32,
     role: &str,
-    page: &Option<u32>,
-    per_page: &Option<u32>,
     from_date: &Option<NaiveDate>,
     to_date: &Option<NaiveDate>,
     client: &Client,
-) -> Result<GetOrdersResult, Error> {
+) -> Result<PaginationResult<Order>, Error> {
     let mut params: Vec<Box<dyn ToSql + Sync>> = vec![];
-    let mut sql = "select o.id, u.name as waiter_name, t.table_number, o.created_at from orders o inner join users u on u.id = o.waiter_id inner join tables t on o.table_id = t.id where u.deleted_at is null and o.deleted_at is null and t.deleted_at is null".to_string();
-    let mut count_sql = "select count(*) as total from orders o inner join users u on u.id = o.waiter_id inner join tables t on o.table_id = t.id where u.deleted_at is null and o.deleted_at is null and t.deleted_at is null".to_string();
+    let mut base_query = "from orders o inner join users u on u.id = o.waiter_id inner join tables t on o.table_id = t.id where u.deleted_at is null and o.deleted_at is null and t.deleted_at is null".to_string();
     if role == "Manager" {
         params.push(Box::new(shop_id));
-        sql = format!("{sql} and t.shop_id = $1");
-        count_sql = format!("{count_sql} and t.shop_id = $1");
+        base_query = format!("{base_query} and t.shop_id = ${}", params.len());
     } else if role == "Waiter" {
         params.push(Box::new(shop_id));
         params.push(Box::new(user_id));
-        sql = format!("{sql} and t.shop_id = $1 and o.waiter_id = $2");
-        count_sql = format!("{count_sql} and t.shop_id = $1 and o.waiter_id = $2");
+        base_query = format!(
+            "{base_query} and t.shop_id = ${} and o.waiter_id = ${}",
+            params.len() - 1,
+            params.len()
+        );
     }
     if from_date.is_some() && to_date.is_some() {
         params.push(Box::new(from_date.unwrap()));
         params.push(Box::new(to_date.unwrap()));
-        sql = format!(
-            "{sql} and o.created_at::date between ${} and ${}",
-            params.len() - 1,
-            params.len()
-        );
-        count_sql = format!(
-            "{count_sql} and o.created_at::date between ${} and ${}",
+        base_query = format!(
+            "{base_query} and o.created_at::date between ${} and ${}",
             params.len() - 1,
             params.len()
         );
     }
-    sql = format!("{sql} order by o.created_at desc");
 
+    let order_options = "o.created_at desc";
+    let result = generate_pagination_query(PaginationOptions {
+        select_columns: "o.id, u.name as waiter_name, t.table_number, o.created_at",
+        base_query: &base_query,
+        search_columns: vec!["u.name"],
+        search: search.as_deref(),
+        order_options: Some(&order_options),
+        page,
+        per_page,
+    });
+
+    let params_slice: Vec<&(dyn ToSql + Sync)> = params.iter().map(AsRef::as_ref).collect();
+
+    let row = client.query_one(&result.count_query, &params_slice).await?;
+    let total: i64 = row.get("total");
+
+    let mut page_counts = 0;
     let mut current_page = 0;
     let mut limit = 0;
-    let mut page_counts = 0;
-    let params_slice: Vec<&(dyn ToSql + Sync)> = params.iter().map(AsRef::as_ref).collect();
-    let row = client.query_one(&count_sql, &params_slice).await?;
-    let total: i64 = row.get("total");
     if page.is_some() && per_page.is_some() {
         current_page = page.unwrap();
         limit = per_page.unwrap();
-        let offset = (current_page - 1) * limit;
-        sql = format!("{sql} limit {limit} offset {offset}");
-        page_counts = (total as f64 / f64::from(limit)).ceil() as usize;
+        page_counts = (total as f64 / limit as f64).ceil() as usize;
     }
-    let rows = client.query(&sql, &params_slice).await?;
 
-    Ok(GetOrdersResult {
-        orders: rows
-            .into_iter()
-            .map(|row| Order {
-                id: row.get("id"),
-                waiter_name: row.get("waiter_name"),
-                table_number: row.get("table_number"),
-                created_at: row.get("created_at"),
-            })
-            .collect(),
+    let orders: Vec<Order> = client
+        .query(&result.query, &params_slice)
+        .await?
+        .iter()
+        .map(|row| Order {
+            id: row.get("id"),
+            waiter_name: row.get("waiter_name"),
+            table_number: row.get("table_number"),
+            created_at: row.get("created_at"),
+        })
+        .collect();
+
+    Ok(PaginationResult {
+        data: orders,
         total,
         page: current_page,
         per_page: limit,
