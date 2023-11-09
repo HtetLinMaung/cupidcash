@@ -42,6 +42,7 @@ async fn main() -> std::io::Result<()> {
             .allow_any_header()
             .max_age(3600);
         App::new()
+            .wrap(cors)
             .app_data(web::Data::new(client.clone()))
             .configure(api::init)
             .service(fs::Files::new("/images", "./images").show_files_listing())
