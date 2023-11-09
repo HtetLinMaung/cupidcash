@@ -15,14 +15,6 @@ pub struct Item {
     pub image_url: String,
 }
 
-pub struct GetItemsResult {
-    pub items: Vec<Item>,
-    pub total: i64,
-    pub page: u32,
-    pub per_page: u32,
-    pub page_counts: usize,
-}
-
 pub async fn get_items(
     search: &Option<String>,
     page: Option<usize>,
