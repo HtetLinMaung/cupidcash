@@ -2,6 +2,7 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::models::user::get_user;
+use crate::utils::common_struct::BaseResponse;
 use crate::utils::jwt;
 use actix_web::{post, web, HttpResponse};
 use bcrypt::{hash, verify, DEFAULT_COST};
@@ -18,8 +19,9 @@ pub struct LoginRequest {
 pub struct LoginResponse {
     pub code: u16,
     pub message: String,
-    pub token: Option<String>,
-    pub name: Option<String>,
+    pub token: String,
+    pub name: String,
+    pub role: String,
 }
 
 #[post("/api/auth/login")]
@@ -46,23 +48,20 @@ pub async fn login(
                 HttpResponse::Ok().json(LoginResponse {
                     code: 200,
                     message: String::from("Token generated successfully."),
-                    token: Some(token),
-                    name: Some(user.name),
+                    token: token,
+                    name: user.name,
+                    role: user.role_name,
                 })
             } else {
-                HttpResponse::Unauthorized().json(LoginResponse {
+                HttpResponse::Unauthorized().json(BaseResponse {
                     code: 401,
                     message: String::from("Invalid password!"),
-                    token: None,
-                    name: None,
                 })
             }
         }
-        None => HttpResponse::Unauthorized().json(LoginResponse {
+        None => HttpResponse::Unauthorized().json(BaseResponse {
             code: 401,
             message: String::from("Invalid username!"),
-            token: None,
-            name: None,
         }),
     }
 }
