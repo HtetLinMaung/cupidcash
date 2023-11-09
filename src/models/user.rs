@@ -16,7 +16,7 @@ pub async fn get_user(username: &str, client: &Client) -> Option<User> {
     // In a real-world scenario, handle errors gracefully
     let result = client
         .query_one(
-            "select u.id, u.username, u.password, r.role_name, u.name, u.shop_id from users u inner join roles r on r.id = u.role_id where username = $1 and u.deleted_at is null and r.deleted_at is null",
+            "select u.id, u.username, u.password, r.role_name, u.name, coalesce(u.shop_id, 0) as shop_id from users u inner join roles r on r.id = u.role_id where username = $1 and u.deleted_at is null and r.deleted_at is null",
             &[&username],
         )
         .await;

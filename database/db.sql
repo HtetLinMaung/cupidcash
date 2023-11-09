@@ -47,11 +47,14 @@ CREATE TABLE users
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     deleted_at TIMESTAMP DEFAULT null
 );
-
 insert into users
     (username, password, name, role_id, shop_id, created_at)
 values
     ('waiter001', '$2b$12$ZQ9xFoR3ve/kjfoMeGuoLO93USM5q.z08or2Z2HMuH0BlS7bTfyTm', 'Waiter 001', 3, 2, now());
+insert into users
+    (username, password, name, role_id, created_at)
+values
+    ('admin', '$2b$12$mPXBoB9P8Csv9MWc89YAnOkVzi.g5YiiLgPizF0vnIV3.Ckyr5SfG', 'Admin', 1, now());
 
 -- Categories Table
 CREATE TABLE categories
