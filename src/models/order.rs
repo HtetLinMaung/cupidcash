@@ -1,6 +1,6 @@
 // use std::time::SystemTime;
 
-use chrono::{NaiveDate, NaiveDateTime};
+use chrono::{format, NaiveDate, NaiveDateTime};
 // use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use tokio_postgres::{types::ToSql, Client, Error};
@@ -54,7 +54,7 @@ pub async fn create_order(
 pub struct Order {
     id: i32,
     waiter_name: String,
-    table_number: i32,
+    table_number: String,
     status: String,
     created_at: NaiveDateTime,
 }
@@ -68,6 +68,7 @@ pub async fn get_orders(
     role: &str,
     from_date: &Option<NaiveDate>,
     to_date: &Option<NaiveDate>,
+    status: &Option<String>,
     client: &Client,
 ) -> Result<PaginationResult<Order>, Error> {
     let mut params: Vec<Box<dyn ToSql + Sync>> = vec![];
@@ -92,6 +93,11 @@ pub async fn get_orders(
             params.len() - 1,
             params.len()
         );
+    }
+
+    if let Some(s) = status {
+        params.push(Box::new(s));
+        base_query = format!("{base_query} and o.status = ${}", params.len());
     }
 
     let order_options = "o.created_at desc";

@@ -82,6 +82,7 @@ pub struct GetOrdersQuery {
     pub per_page: Option<usize>,
     pub from_date: Option<NaiveDate>,
     pub to_date: Option<NaiveDate>,
+    pub status: Option<String>,
 }
 
 #[get("/api/orders")]
@@ -143,6 +144,7 @@ pub async fn get_orders(
         role,
         &query.from_date,
         &query.to_date,
+        &query.status,
         &client,
     )
     .await
