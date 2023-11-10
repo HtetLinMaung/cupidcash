@@ -1,7 +1,8 @@
 use actix_web::{get, post, web, HttpRequest, HttpResponse, Responder};
 use chrono::NaiveDate;
 use serde::Deserialize;
-use std::sync::Arc;
+use serde_json::Value;
+use std::{collections::HashMap, sync::Arc};
 use tokio_postgres::Client;
 
 use crate::{
@@ -9,6 +10,7 @@ use crate::{
     utils::{
         common_struct::{BaseResponse, DataResponse, PaginationResponse},
         jwt::verify_token_and_get_sub,
+        socketio,
     },
 };
 
@@ -63,11 +65,25 @@ pub async fn create_order(
     // let shop_id: i32 = parsed_values[2].parse().unwrap();
 
     match order::create_order(user_id, data.into_inner(), &client).await {
-        Ok(id) => HttpResponse::Ok().json(DataResponse {
-            code: 200,
-            message: String::from("Order created successfully"),
-            data: Some(id),
-        }),
+        Ok(id) => {
+            tokio::spawn(async move {
+                let mut payload: HashMap<String, Value> = HashMap::new();
+                payload.insert("order_id".to_string(), Value::Number(id.into()));
+                match socketio::emit("/pos", "new-order", &vec![], Some(payload)).await {
+                    Ok(_) => {
+                        println!("new-order event sent successfully.");
+                    }
+                    Err(err) => {
+                        println!("{:?}", err);
+                    }
+                };
+            });
+            HttpResponse::Ok().json(DataResponse {
+                code: 200,
+                message: String::from("Order created successfully"),
+                data: Some(id),
+            })
+        }
         Err(_) => HttpResponse::InternalServerError().json(BaseResponse {
             code: 500,
             message: String::from("Error creating order"),
