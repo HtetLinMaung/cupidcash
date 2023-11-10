@@ -104,7 +104,7 @@ pub async fn get_orders(
     let result = generate_pagination_query(PaginationOptions {
         select_columns: "o.id, u.name as waiter_name, t.table_number, o.status, o.created_at",
         base_query: &base_query,
-        search_columns: vec!["u.name"],
+        search_columns: vec!["u.name", "t.table_number", "o.status", "o.id::varchar"],
         search: search.as_deref(),
         order_options: Some(&order_options),
         page,
