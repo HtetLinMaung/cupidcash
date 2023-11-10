@@ -1,6 +1,6 @@
 // use std::time::SystemTime;
 
-use chrono::{format, NaiveDate, NaiveDateTime};
+use chrono::{NaiveDate, NaiveDateTime};
 // use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use tokio_postgres::{types::ToSql, Client, Error};
@@ -151,7 +151,7 @@ pub async fn get_orders(
 pub struct OrderDetail {
     id: i32,
     waiter_name: String,
-    table_number: i32,
+    table_number: String,
     created_at: NaiveDateTime,
     items: Vec<OrderItem>,
 }
@@ -170,11 +170,27 @@ pub async fn get_order_detail(
     shop_id: i32,
     user_id: i32,
     order_id: i32,
+    role: &str,
     client: &Client,
 ) -> Result<OrderDetail, Error> {
-    let order_row = client
-        .query_one("select o.id, u.name as waiter_name, t.table_number, o.created_at from orders o inner join users u on u.id = o.waiter_id inner join tables t on o.table_id = t.id where u.deleted_at is null and o.deleted_at is null and t.deleted_at is null and t.shop_id = $1 and o.waiter_id = $2 and o.id = $3", &[&shop_id, &user_id,&order_id])
-        .await?;
+    let mut params: Vec<Box<dyn ToSql + Sync>> = vec![Box::new(order_id)];
+    let mut query = format!("select o.id, u.name as waiter_name, t.table_number, o.created_at from orders o inner join users u on u.id = o.waiter_id inner join tables t on o.table_id = t.id where u.deleted_at is null and o.deleted_at is null and t.deleted_at is null and o.id = $1");
+
+    if role == "Waiter" {
+        params.push(Box::new(shop_id));
+        params.push(Box::new(user_id));
+        query = format!(
+            "{query} and t.shop_id = ${} and o.waiter_id = ${}",
+            params.len() - 1,
+            params.len()
+        );
+    } else if role == "Manager" {
+        params.push(Box::new(shop_id));
+        query = format!("{query} and t.shop_id = ${}", params.len());
+    }
+
+    let params_slice: Vec<&(dyn ToSql + Sync)> = params.iter().map(AsRef::as_ref).collect();
+    let order_row = client.query_one(&query, &params_slice).await?;
 
     // Assume there's another table called order_items linking orders to items.
     let item_rows = client

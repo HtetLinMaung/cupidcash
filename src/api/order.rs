@@ -232,18 +232,21 @@ pub async fn get_order_detail(
     }
 
     let user_id: i32 = parsed_values[0].parse().unwrap();
-    // let role_name: &str = parsed_values[1];
+    let role_name: &str = parsed_values[1];
     let shop_id: i32 = parsed_values[2].parse().unwrap();
     let order_id = order_id.into_inner(); // Extract the inner value
-    match order::get_order_detail(shop_id, user_id, order_id, &client).await {
+    match order::get_order_detail(shop_id, user_id, order_id, role_name, &client).await {
         Ok(order_detail) => HttpResponse::Ok().json(DataResponse {
             code: 200,
             message: String::from("Successful."),
             data: Some(order_detail),
         }),
-        Err(_) => HttpResponse::InternalServerError().json(BaseResponse {
-            code: 500,
-            message: String::from("Error trying to read order details from database"),
-        }),
+        Err(err) => {
+            println!("{:?}", err);
+            HttpResponse::InternalServerError().json(BaseResponse {
+                code: 500,
+                message: String::from("Error trying to read order details from database"),
+            })
+        }
     }
 }
