@@ -110,9 +110,8 @@ VALUES
 CREATE TABLE tables
 (
     id SERIAL PRIMARY KEY,
-    table_number INTEGER NOT NULL,
+    table_number VARCHAR(255) NOT NULL,
     qr_code TEXT,
-    -- if storing QR code data
     shop_id INTEGER REFERENCES shops(id),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     deleted_at TIMESTAMP DEFAULT null
@@ -121,16 +120,16 @@ CREATE TABLE tables
 INSERT INTO tables
     (table_number, qr_code, shop_id, created_at)
 VALUES
-    (1, '', 2, '2023-09-19 10:00:00'),
-    (2, '', 2, '2023-09-19 10:05:00'),
-    (3, '', 2, '2023-09-19 10:10:00'),
-    (4, '', 2, '2023-09-19 10:15:00'),
-    (5, '', 2, '2023-09-19 10:20:00'),
-    (6, '', 2, '2023-09-19 10:25:00'),
-    (7, '', 2, '2023-09-19 10:30:00'),
-    (8, '', 2, '2023-09-19 10:35:00'),
-    (9, '', 2, '2023-09-19 10:40:00'),
-    (10, '', 2, '2023-09-19 10:45:00');
+    ('A1', '', 2, '2023-09-19 10:00:00'),
+    ('A2', '', 2, '2023-09-19 10:05:00'),
+    ('A3', '', 2, '2023-09-19 10:10:00'),
+    ('A4', '', 2, '2023-09-19 10:15:00'),
+    ('A5', '', 2, '2023-09-19 10:20:00'),
+    ('A6', '', 2, '2023-09-19 10:25:00'),
+    ('A7', '', 2, '2023-09-19 10:30:00'),
+    ('A8', '', 2, '2023-09-19 10:35:00'),
+    ('A9', '', 2, '2023-09-19 10:40:00'),
+    ('A10', '', 2, '2023-09-19 10:45:00');
 
 -- Orders Table
 CREATE TABLE orders

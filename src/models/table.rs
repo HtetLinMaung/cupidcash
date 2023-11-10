@@ -5,7 +5,7 @@ use tokio_postgres::Client;
 #[derive(serde::Serialize)]
 pub struct Table {
     pub id: i32,
-    pub table_number: i32,
+    pub table_number: String,
     pub qr_code: String,
 }
 
