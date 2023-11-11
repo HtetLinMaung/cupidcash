@@ -2,9 +2,9 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::models::user::get_user;
-use crate::utils::common_struct::BaseResponse;
-use crate::utils::jwt;
-use actix_web::{post, web, HttpResponse};
+use crate::utils::common_struct::{BaseResponse, DataResponse};
+use crate::utils::jwt::{self, verify_token_and_get_sub};
+use actix_web::{post, web, HttpResponse, Responder};
 use bcrypt::{hash, verify, DEFAULT_COST};
 use serde::{Deserialize, Serialize};
 use tokio_postgres::Client;
@@ -84,4 +84,43 @@ pub async fn hash_password(password_input: web::Json<PasswordInput>) -> HttpResp
         }),
         Err(_) => HttpResponse::InternalServerError().body("Failed to hash password"),
     }
+}
+
+#[derive(Deserialize)]
+pub struct VerifyTokenRequest {
+    pub token: String,
+}
+
+#[derive(Serialize)]
+pub struct VerifyTokenData {
+    pub room: i32,
+}
+
+#[post("/api/auth/verify-token")]
+pub async fn verify_token(body: web::Json<VerifyTokenRequest>) -> impl Responder {
+    let sub = match verify_token_and_get_sub(&body.token) {
+        Some(s) => s,
+        None => {
+            return HttpResponse::Unauthorized().json(BaseResponse {
+                code: 401,
+                message: String::from("Invalid token"),
+            })
+        }
+    };
+
+    // Parse the `sub` value
+    let parsed_values: Vec<&str> = sub.split(',').collect();
+    if parsed_values.len() != 2 {
+        return HttpResponse::InternalServerError().json(BaseResponse {
+            code: 500,
+            message: String::from("Invalid sub format in token"),
+        });
+    }
+
+    let user_id: i32 = parsed_values[0].parse().unwrap();
+    return HttpResponse::Ok().json(DataResponse {
+        code: 200,
+        message: String::from("Token is valid."),
+        data: Some(VerifyTokenData { room: user_id }),
+    });
 }
