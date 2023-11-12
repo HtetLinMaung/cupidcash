@@ -224,3 +224,54 @@ pub async fn get_order_detail(
         items,
     })
 }
+
+pub async fn get_order_by_id(
+    order_id: i32,
+    user_id: i32,
+    shop_id: i32,
+    role: &str,
+    client: &Client,
+) -> Option<Order> {
+    let mut params: Vec<Box<dyn ToSql + Sync>> = vec![Box::new(order_id)];
+    let mut base_query = "select o.id, u.name as waiter_name, t.table_number, o.status, o.created_at from orders o inner join users u on u.id = o.waiter_id inner join tables t on o.table_id = t.id where u.deleted_at is null and o.deleted_at is null and t.deleted_at is null and o.id = $1".to_string();
+    if role == "Manager" {
+        params.push(Box::new(shop_id));
+        base_query = format!("{base_query} and t.shop_id = ${}", params.len());
+    } else if role == "Waiter" {
+        params.push(Box::new(shop_id));
+        params.push(Box::new(user_id));
+        base_query = format!(
+            "{base_query} and t.shop_id = ${} and o.waiter_id = ${}",
+            params.len() - 1,
+            params.len()
+        );
+    }
+    let params_slice: Vec<&(dyn ToSql + Sync)> = params.iter().map(AsRef::as_ref).collect();
+    match client.query_one(&base_query, &params_slice).await {
+        Ok(row) => Some(Order {
+            id: row.get("id"),
+            waiter_name: row.get("waiter_name"),
+            table_number: row.get("table_number"),
+            status: row.get("status"),
+            created_at: row.get("created_at"),
+        }),
+        Err(err) => {
+            println!("{:?}", err);
+            None
+        }
+    }
+}
+
+pub async fn update_order(
+    order_id: i32,
+    status: &str,
+    client: &Client,
+) -> Result<(), Box<dyn std::error::Error>> {
+    client
+        .execute(
+            "update orders set status = $1 where id = $2",
+            &[&status, &order_id],
+        )
+        .await?;
+    Ok(())
+}

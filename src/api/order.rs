@@ -1,4 +1,4 @@
-use actix_web::{get, post, web, HttpRequest, HttpResponse, Responder};
+use actix_web::{get, post, put, web, HttpRequest, HttpResponse, Responder};
 use chrono::NaiveDate;
 use serde::Deserialize;
 use serde_json::Value;
@@ -248,5 +248,166 @@ pub async fn get_order_detail(
                 message: String::from("Error trying to read order details from database"),
             })
         }
+    }
+}
+
+#[get("/api/orders/{order_id}")]
+pub async fn get_order_by_id(
+    req: HttpRequest,
+    path: web::Path<i32>,
+    client: web::Data<Arc<Client>>,
+) -> HttpResponse {
+    let order_id = path.into_inner();
+    // Extract the token from the Authorization header
+    let token = match req.headers().get("Authorization") {
+        Some(value) => {
+            let parts: Vec<&str> = value.to_str().unwrap_or("").split_whitespace().collect();
+            if parts.len() == 2 && parts[0] == "Bearer" {
+                parts[1]
+            } else {
+                return HttpResponse::BadRequest().json(BaseResponse {
+                    code: 400,
+                    message: String::from("Invalid Authorization header format"),
+                });
+            }
+        }
+        None => {
+            return HttpResponse::Unauthorized().json(BaseResponse {
+                code: 401,
+                message: String::from("Authorization header missing"),
+            })
+        }
+    };
+
+    let sub = match verify_token_and_get_sub(token) {
+        Some(s) => s,
+        None => {
+            return HttpResponse::Unauthorized().json(BaseResponse {
+                code: 401,
+                message: String::from("Invalid token"),
+            })
+        }
+    };
+
+    // Parse the `sub` value
+    let parsed_values: Vec<&str> = sub.split(',').collect();
+    if parsed_values.len() != 2 {
+        return HttpResponse::InternalServerError().json(BaseResponse {
+            code: 500,
+            message: String::from("Invalid sub format in token"),
+        });
+    }
+
+    let user_id: i32 = parsed_values[0].parse().unwrap();
+    let role: &str = parsed_values[1];
+    let shop_id: i32 = parsed_values[2].parse().unwrap();
+
+    match order::get_order_by_id(order_id, user_id, shop_id, role, &client).await {
+        Some(c) => HttpResponse::Ok().json(DataResponse {
+            code: 200,
+            message: String::from("Order fetched successfully."),
+            data: Some(c),
+        }),
+        None => HttpResponse::NotFound().json(BaseResponse {
+            code: 404,
+            message: String::from("Order not found!"),
+        }),
+    }
+}
+
+#[derive(Deserialize)]
+pub struct UpdateOrderRequest {
+    pub status: String,
+}
+
+#[put("/api/orders/{order_id}")]
+pub async fn update_order(
+    req: HttpRequest,
+    path: web::Path<i32>,
+    body: web::Json<UpdateOrderRequest>,
+    client: web::Data<Arc<Client>>,
+) -> HttpResponse {
+    let order_id = path.into_inner();
+    // Extract the token from the Authorization header
+    let token = match req.headers().get("Authorization") {
+        Some(value) => {
+            let parts: Vec<&str> = value.to_str().unwrap_or("").split_whitespace().collect();
+            if parts.len() == 2 && parts[0] == "Bearer" {
+                parts[1]
+            } else {
+                return HttpResponse::BadRequest().json(BaseResponse {
+                    code: 400,
+                    message: String::from("Invalid Authorization header format"),
+                });
+            }
+        }
+        None => {
+            return HttpResponse::Unauthorized().json(BaseResponse {
+                code: 401,
+                message: String::from("Authorization header missing"),
+            })
+        }
+    };
+
+    let sub = match verify_token_and_get_sub(token) {
+        Some(s) => s,
+        None => {
+            return HttpResponse::Unauthorized().json(BaseResponse {
+                code: 401,
+                message: String::from("Invalid token"),
+            })
+        }
+    };
+
+    // Parse the `sub` value
+    let parsed_values: Vec<&str> = sub.split(',').collect();
+    if parsed_values.len() != 2 {
+        return HttpResponse::InternalServerError().json(BaseResponse {
+            code: 500,
+            message: String::from("Invalid sub format in token"),
+        });
+    }
+
+    let user_id: i32 = parsed_values[0].parse().unwrap();
+    let role: &str = parsed_values[1];
+    let shop_id: i32 = parsed_values[2].parse().unwrap();
+
+    if role == "Waiter" {
+        if &body.status != "Canceled" {
+            return HttpResponse::Unauthorized().json(BaseResponse {
+                code: 401,
+                message: String::from("Unauthorized!"),
+            });
+        }
+    }
+
+    let status_list: Vec<&str> = vec!["Pending", "Served", "Canceled", "Completed"];
+    if !status_list.contains(&body.status.as_str()) {
+        return HttpResponse::BadRequest().json(BaseResponse {
+            code: 400,
+            message: String::from(
+                "Please select a valid status: Pending, Served, Canceled, or Completed.",
+            ),
+        });
+    }
+
+    match order::get_order_by_id(order_id, user_id, shop_id, role, &client).await {
+        Some(_) => match order::update_order(order_id, &body.status, &client).await {
+            Ok(()) => HttpResponse::Ok().json(BaseResponse {
+                code: 200,
+                message: String::from("Order updated successfully"),
+            }),
+            Err(e) => {
+                eprintln!("Order updating error: {}", e);
+                return HttpResponse::InternalServerError().json(BaseResponse {
+                    code: 500,
+                    message: String::from("Error updating order!"),
+                });
+            }
+        },
+        None => HttpResponse::NotFound().json(BaseResponse {
+            code: 404,
+            message: String::from("Order not found!"),
+        }),
     }
 }
