@@ -18,4 +18,5 @@ pub fn init(cfg: &mut web::ServiceConfig) {
     cfg.service(order::get_order_detail);
     cfg.service(auth::verify_token);
     cfg.service(order::get_order_by_id);
+    cfg.service(order::update_order);
 }

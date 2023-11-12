@@ -291,7 +291,7 @@ pub async fn get_order_by_id(
 
     // Parse the `sub` value
     let parsed_values: Vec<&str> = sub.split(',').collect();
-    if parsed_values.len() != 2 {
+    if parsed_values.len() != 3 {
         return HttpResponse::InternalServerError().json(BaseResponse {
             code: 500,
             message: String::from("Invalid sub format in token"),
@@ -361,7 +361,7 @@ pub async fn update_order(
 
     // Parse the `sub` value
     let parsed_values: Vec<&str> = sub.split(',').collect();
-    if parsed_values.len() != 2 {
+    if parsed_values.len() != 3 {
         return HttpResponse::InternalServerError().json(BaseResponse {
             code: 500,
             message: String::from("Invalid sub format in token"),
@@ -372,15 +372,6 @@ pub async fn update_order(
     let role: &str = parsed_values[1];
     let shop_id: i32 = parsed_values[2].parse().unwrap();
 
-    if role == "Waiter" {
-        if &body.status != "Canceled" {
-            return HttpResponse::Unauthorized().json(BaseResponse {
-                code: 401,
-                message: String::from("Unauthorized!"),
-            });
-        }
-    }
-
     let status_list: Vec<&str> = vec!["Pending", "Served", "Canceled", "Completed"];
     if !status_list.contains(&body.status.as_str()) {
         return HttpResponse::BadRequest().json(BaseResponse {
@@ -389,6 +380,15 @@ pub async fn update_order(
                 "Please select a valid status: Pending, Served, Canceled, or Completed.",
             ),
         });
+    }
+
+    if role == "Waiter" {
+        if &body.status != "Canceled" {
+            return HttpResponse::Unauthorized().json(BaseResponse {
+                code: 401,
+                message: String::from("Unauthorized!"),
+            });
+        }
     }
 
     match order::get_order_by_id(order_id, user_id, shop_id, role, &client).await {
