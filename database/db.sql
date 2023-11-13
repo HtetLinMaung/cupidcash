@@ -84,9 +84,7 @@ CREATE TABLE items
     name VARCHAR(255) NOT NULL,
     description TEXT,
     price DECIMAL(10, 2) NOT NULL,
-    category_id INTEGER REFERENCES categories(id),
     image_url TEXT,
-    -- This can store the URL of the image if hosted externally
     shop_id INTEGER REFERENCES shops(id),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     deleted_at TIMESTAMP DEFAULT null
@@ -94,17 +92,34 @@ CREATE TABLE items
 
 -- Sample data for items table
 INSERT INTO items
-    (name, description, price, category_id, image_url, shop_id)
+    (name, description, price, image_url, shop_id)
 VALUES
-    ('Espresso', 'Strong coffee without milk', 2.50, 4, '/images/espresso.jpeg', 2),
-    ('Cappuccino', 'Coffee with frothy milk on top', 3.00, 4, '/images/espresso.jpeg', 2),
-    ('Green Salad', 'Mixed greens with vinaigrette', 5.50, 4, '/images/espresso.jpeg', 2),
-    ('Cheese Burger', 'Burger with cheese and lettuce', 7.00, 4, '/images/espresso.jpeg', 2),
-    ('Spaghetti Carbonara', 'Creamy pasta with bacon bits', 8.50, 4, '/images/espresso.jpeg', 2),
-    ('Lemon Tart', 'Tangy lemon dessert', 4.50, 4, '/images/espresso.jpeg', 2),
-    ('Mineral Water', 'Sparkling water in a bottle', 1.50, 4, '/images/espresso.jpeg', 2);
+    ('Espresso', 'Strong coffee without milk', 2.50, '/images/espresso.jpeg', 2),
+    ('Cappuccino', 'Coffee with frothy milk on top', 3.00, '/images/espresso.jpeg', 2),
+    ('Green Salad', 'Mixed greens with vinaigrette', 5.50, '/images/espresso.jpeg', 2),
+    ('Cheese Burger', 'Burger with cheese and lettuce', 7.00, '/images/espresso.jpeg', 2),
+    ('Spaghetti Carbonara', 'Creamy pasta with bacon bits', 8.50, '/images/espresso.jpeg', 2),
+    ('Lemon Tart', 'Tangy lemon dessert', 4.50, '/images/espresso.jpeg', 2),
+    ('Mineral Water', 'Sparkling water in a bottle', 1.50, '/images/espresso.jpeg', 2);
 
+CREATE TABLE item_categories
+(
+    id SERIAL PRIMARY KEY,
+    item_id INTEGER REFERENCES items(id),
+    category_id INTEGER REFERENCES categories(id),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 
+insert into item_categories
+    (item_id, category_id)
+values
+    (1, 4),
+    (2, 4),
+    (3, 4),
+    (4, 4),
+    (5, 4),
+    (6, 4),
+    (7, 4);
 
 -- Tables (Restaurant Tables) Table
 CREATE TABLE tables
