@@ -110,7 +110,7 @@ pub async fn verify_token(body: web::Json<VerifyTokenRequest>) -> impl Responder
 
     // Parse the `sub` value
     let parsed_values: Vec<&str> = sub.split(',').collect();
-    if parsed_values.len() != 2 {
+    if parsed_values.len() != 3 {
         return HttpResponse::InternalServerError().json(BaseResponse {
             code: 500,
             message: String::from("Invalid sub format in token"),

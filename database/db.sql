@@ -41,7 +41,6 @@ CREATE TABLE users
     name varchar(255) not null,
     username VARCHAR(100) UNIQUE NOT NULL,
     password TEXT NOT NULL,
-    -- ensure it's hashed in application logic
     role_id INTEGER REFERENCES roles(id),
     shop_id INTEGER REFERENCES shops(id),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
