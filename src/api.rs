@@ -31,4 +31,8 @@ pub fn init(cfg: &mut web::ServiceConfig) {
     cfg.service(user::update_user);
     cfg.service(user::delete_user);
     cfg.service(role::get_roles);
+    cfg.service(category::add_category);
+    cfg.service(category::get_category_by_id);
+    cfg.service(category::update_category);
+    cfg.service(category::delete_category);
 }

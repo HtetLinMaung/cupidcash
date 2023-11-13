@@ -301,3 +301,13 @@ pub async fn delete_item(
 //         }
 //     }
 // }
+
+pub async fn is_items_exist(
+    category_id: i32,
+    client: &Client,
+) -> Result<bool, Box<dyn std::error::Error>> {
+    let query = format!("select count(*) as total from item_categories where category_id = $1");
+    let row = client.query_one(&query, &[&category_id]).await?;
+    let total: i64 = row.get("total");
+    Ok(total > 0)
+}
