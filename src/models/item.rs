@@ -47,7 +47,7 @@ pub async fn get_items(
 
     if let Some(c) = category_id {
         params.push(Box::new(c));
-        base_query = format!("{base_query} and i.item_id in (select item_id from item_categories where category_id = ${})", params.len());
+        base_query = format!("{base_query} and i.id in (select item_id from item_categories where category_id = ${})", params.len());
     }
 
     let order_options = if role == "Waiter" {
