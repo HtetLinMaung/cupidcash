@@ -75,7 +75,7 @@ pub async fn get_users(
     client: &Client,
 ) -> Result<PaginationResult<User>, Error> {
     let mut base_query =
-        "from users u join roles r on u.id = r.id left join shops s on s.id = u.shop_id where u.deleted_at is null and r.deleted_at is null and s.deleted_at is null".to_string();
+        "from users u join roles r on u.role_id = r.id left join shops s on s.id = u.shop_id where u.deleted_at is null and r.deleted_at is null and s.deleted_at is null".to_string();
     let mut params: Vec<Box<dyn ToSql + Sync>> = vec![];
 
     if let Some(ri) = role_id {
