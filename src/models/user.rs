@@ -141,7 +141,7 @@ pub async fn get_users(
 }
 
 pub async fn get_user_by_id(user_id: i32, client: &Client) -> Option<User> {
-    match client.query_one("select u.id, u.name, u.username, u.password, u.role_id, r.role_name, coalesce(u.shop_id, 0) as shop_id, coalesce(s.name, '') as shop_name, u.created_at from users u join roles r on u.id = r.id left join shops s on s.id = u.shop_id where u.deleted_at is null and r.deleted_at is null and s.deleted_at is null and u.id = $1", &[&user_id]).await {
+    match client.query_one("select u.id, u.name, u.username, u.password, u.role_id, r.role_name, coalesce(u.shop_id, 0) as shop_id, coalesce(s.name, '') as shop_name, u.created_at from users u join roles r on u.role_id = r.id left join shops s on s.id = u.shop_id where u.deleted_at is null and r.deleted_at is null and s.deleted_at is null and u.id = $1", &[&user_id]).await {
         Ok(row) => Some(User {
             id: row.get("id"),
             name: row.get("name"),
