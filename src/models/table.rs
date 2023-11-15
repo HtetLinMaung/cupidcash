@@ -158,7 +158,7 @@ pub async fn delete_table(
 }
 
 pub async fn table_number_exists(table_number: &str, shop_id: &i32, client: &Client) -> Result<bool, Error> {
-    // Execute a query to check if the username exists in the users table
+    // Execute a query to check if the table_number exists in the tables table
     let row = client
         .query_one(
             "SELECT table_number FROM tables WHERE table_number = $1 and shop_id=$2 and deleted_at is null",
