@@ -10,6 +10,7 @@ services:
     environment:
       - "DB_CONNECTION=host=150.95.82.125 user=postgres password=P@ssword dbname=pos"
       - JWT_SECRET=0b84221cadfd321e547f74fc5b4940b1bb31bf2d58a411b3454c9b2908a1bf30
+      - INSTANT_IO_URL=http://instantio:3000/instantio/emit
     volumes:
       - ./images:/images
   instantio:
