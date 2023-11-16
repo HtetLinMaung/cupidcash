@@ -41,4 +41,8 @@ pub fn init(cfg: &mut web::ServiceConfig) {
     cfg.service(shop::get_shop_by_id);
     cfg.service(shop::update_shop);
     cfg.service(shop::delete_shop);
+    cfg.service(table::add_table);
+    cfg.service(table::get_table_by_id);
+    cfg.service(table::update_table);
+    cfg.service(table::delete_table);
 }
