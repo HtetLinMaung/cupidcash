@@ -154,6 +154,7 @@ pub struct OrderDetail {
     table_number: String,
     created_at: NaiveDateTime,
     items: Vec<OrderItem>,
+    status: String,
 }
 
 #[derive(Serialize)]
@@ -174,7 +175,7 @@ pub async fn get_order_detail(
     client: &Client,
 ) -> Result<OrderDetail, Error> {
     let mut params: Vec<Box<dyn ToSql + Sync>> = vec![Box::new(order_id)];
-    let mut query = format!("select o.id, u.name as waiter_name, t.table_number, o.created_at from orders o inner join users u on u.id = o.waiter_id inner join tables t on o.table_id = t.id where u.deleted_at is null and o.deleted_at is null and t.deleted_at is null and o.id = $1");
+    let mut query = format!("select o.id, u.name as waiter_name, t.table_number, o.created_at, o.status from orders o inner join users u on u.id = o.waiter_id inner join tables t on o.table_id = t.id where u.deleted_at is null and o.deleted_at is null and t.deleted_at is null and o.id = $1");
 
     if role == "Waiter" {
         params.push(Box::new(shop_id));
@@ -221,6 +222,7 @@ pub async fn get_order_detail(
         waiter_name: order_row.get("waiter_name"),
         table_number: order_row.get("table_number"),
         created_at: order_row.get("created_at"),
+        status: order_row.get("status"),
         items,
     })
 }
