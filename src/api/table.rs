@@ -340,7 +340,7 @@ pub async fn update_table(
 
     match table::get_table_by_id(table_id, &client).await {
         Some(t) => {
-            if &t.table_number != &body.table_number {
+            if (&t.table_number != &body.table_number) || (&t.shop_id != &body.shop_id) {
                 match table::table_number_exists(&body.table_number, &body.shop_id, &client).await {
                     Ok(exists) => {
                         if exists {
