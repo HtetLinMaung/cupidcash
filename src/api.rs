@@ -46,5 +46,4 @@ pub fn init(cfg: &mut web::ServiceConfig) {
     cfg.service(table::update_table);
     cfg.service(table::delete_table);
     cfg.service(image::upload);
-    cfg.service(table::get_dashboard_data);
 }
