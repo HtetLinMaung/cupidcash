@@ -63,31 +63,47 @@ pub async fn create_order(
     let user_id: i32 = parsed_values[0].parse().unwrap();
     // let role_name: &str = parsed_values[1];
     // let shop_id: i32 = parsed_values[2].parse().unwrap();
-
-    match order::create_order(user_id, data.into_inner(), &client).await {
-        Ok(id) => {
-            tokio::spawn(async move {
-                let mut payload: HashMap<String, Value> = HashMap::new();
-                payload.insert("order_id".to_string(), Value::Number(id.into()));
-                match socketio::emit("/pos", "new-order", &vec![], Some(payload)).await {
-                    Ok(_) => {
-                        println!("new-order event sent successfully.");
-                    }
-                    Err(err) => {
-                        println!("{:?}", err);
-                    }
-                };
-            });
-            HttpResponse::Ok().json(DataResponse {
-                code: 200,
-                message: String::from("Order created successfully"),
-                data: Some(id),
-            })
+    match order::order_exists_in_table(&data.table_id, &client).await {
+        Ok(exists) => {
+            if exists {
+                return HttpResponse::BadRequest().json(BaseResponse {
+                    code: 400,
+                    message: String::from("Order already exists in the request table!"),
+                });
+            }
+            match order::create_order(user_id, data.into_inner(), &client).await {
+                Ok(id) => {
+                    tokio::spawn(async move {
+                        let mut payload: HashMap<String, Value> = HashMap::new();
+                        payload.insert("order_id".to_string(), Value::Number(id.into()));
+                        match socketio::emit("/pos", "new-order", &vec![], Some(payload)).await {
+                            Ok(_) => {
+                                println!("new-order event sent successfully.");
+                            }
+                            Err(err) => {
+                                println!("{:?}", err);
+                            }
+                        };
+                    });
+                    HttpResponse::Ok().json(DataResponse {
+                        code: 200,
+                        message: String::from("Order created successfully"),
+                        data: Some(id),
+                    })
+                }
+                Err(_) => HttpResponse::InternalServerError().json(BaseResponse {
+                    code: 500,
+                    message: String::from("Error creating order"),
+                }),
+            }
         }
-        Err(_) => HttpResponse::InternalServerError().json(BaseResponse {
-            code: 500,
-            message: String::from("Error creating order"),
-        }),
+        Err(e) => {
+            eprintln!("Database error: {}", e);
+            return HttpResponse::InternalServerError().json(BaseResponse {
+                code: 500,
+                message: String::from("Something went wrong!"),
+            });
+        }
     }
 }
 

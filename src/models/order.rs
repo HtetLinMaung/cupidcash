@@ -277,3 +277,20 @@ pub async fn update_order(
         .await?;
     Ok(())
 }
+
+
+pub async fn order_exists_in_table(
+    table_id: &i32,
+    client: &Client,
+) -> Result<bool, Error> {
+    // Execute a query to check if the order is not completed or canceled exists in the request table
+    let row = client
+        .query_one(
+            "SELECT id FROM orders WHERE table_id = $1 and status in ('Pending','Served') ORDER BY id LIMIT 1",
+            &[&table_id],
+        )
+        .await;
+
+    // Return whether the user exists
+    Ok(row.is_ok())
+}
