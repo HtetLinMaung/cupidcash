@@ -161,6 +161,7 @@ CREATE TABLE order_items
 (
     order_id INTEGER REFERENCES orders(id),
     item_id INTEGER REFERENCES items(id),
+    price DECIMAL(10, 2) DEFAULT 0.0,
     quantity INTEGER NOT NULL,
     special_instructions TEXT,
     PRIMARY KEY(order_id, item_id)
