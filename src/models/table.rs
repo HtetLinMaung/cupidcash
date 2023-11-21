@@ -29,7 +29,7 @@ pub async fn get_tables(
     let mut base_query =
         "from tables t join shops s on s.id = t.shop_id 
         left join orders o on t.id=o.table_id and o.status not in ('Canceled','Completed')
-        where t.deleted_at is null".to_string();
+        where t.deleted_at is null and s.deleted_at is null".to_string();
     let mut params: Vec<Box<dyn ToSql + Sync>> = vec![];
 
     let order_options = if role == "Waiter" {
