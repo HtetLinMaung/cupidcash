@@ -316,7 +316,7 @@ pub async fn is_items_exist_for_shop(
     shop_id: i32,
     client: &Client,
 ) -> Result<bool, Box<dyn std::error::Error>> {
-    let query = format!("select count(*) as total from items where shop_id = $1");
+    let query = format!("select count(*) as total from items where shop_id = $1 and deleted_at is null");
     let row = client.query_one(&query, &[&shop_id]).await?;
     let total: i64 = row.get("total");
     Ok(total > 0)
