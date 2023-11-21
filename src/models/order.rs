@@ -42,8 +42,8 @@ pub async fn create_order(
 
     for item in order.items {
         client.execute(
-            "insert into order_items (order_id, item_id, quantity, special_instructions) VALUES (currval(pg_get_serial_sequence('orders', 'id')), $1, $2, $3)",
-            &[&item.item_id, &item.quantity, &item.special_instructions]
+            "insert into order_items (order_id, item_id, quantity, price, special_instructions) VALUES (currval(pg_get_serial_sequence('orders', 'id')), $1, $2,(select coalesce(price, 0.0) from items where id= $3 and deleted_at is null), $4)",
+            &[&item.item_id, &item.quantity, &item.item_id,&item.special_instructions]
         ).await?;
     }
 
@@ -196,7 +196,7 @@ pub async fn get_order_detail(
     // Assume there's another table called order_items linking orders to items.
     let item_rows = client
         .query(
-            "SELECT i.name as item_name, i.description, i.price::text, i.image_url, oi.quantity, oi.special_instructions FROM order_items oi inner join items i on oi.item_id = i.id WHERE order_id = $1 and i.deleted_at is null order by i.name",
+            "SELECT i.name as item_name, i.description, oi.price::text, i.image_url, oi.quantity, oi.special_instructions FROM order_items oi inner join items i on oi.item_id = i.id WHERE order_id = $1 and i.deleted_at is null order by i.name",
             &[&order_id],
         )
         .await?;
