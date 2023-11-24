@@ -56,8 +56,10 @@ pub struct Order {
     pub waiter_name: String,
     pub table_number: String,
     pub status: String,
+    pub sub_total: f64,
     pub tax: f64,
     pub discount: f64,
+    pub total: f64,
     pub created_at: NaiveDateTime,
 }
 
@@ -102,10 +104,11 @@ pub async fn get_orders(
         base_query = format!("{base_query} and o.status = ${}", params.len());
     }
 
+    let sub_total_query = "(select sum(price * quantity) from order_items where order_id = o.id)";
+    let select_columns = format!("o.id, u.name as waiter_name, t.table_number, o.status, o.tax::text, o.discount::text, coalesce({sub_total_query}, 0.0)::text as sub_total, coalesce({sub_total_query} - o.discount + o.tax, 0.0)::text as total, o.created_at");
     let order_options = "o.created_at desc";
     let result = generate_pagination_query(PaginationOptions {
-        select_columns:
-            "o.id, u.name as waiter_name, t.table_number, o.status, o.tax::text, o.discount::text, o.created_at",
+        select_columns: &select_columns,
         base_query: &base_query,
         search_columns: vec!["u.name", "t.table_number", "o.status", "o.id::varchar"],
         search: search.as_deref(),
@@ -133,16 +136,20 @@ pub async fn get_orders(
         .await?
         .iter()
         .map(|row| {
+            let sub_total: &str = row.get("sub_total");
             let tax: &str = row.get("tax");
             let discount: &str = row.get("discount");
+            let total: &str = row.get("total");
 
             return Order {
                 id: row.get("id"),
                 waiter_name: row.get("waiter_name"),
                 table_number: row.get("table_number"),
                 status: row.get("status"),
+                sub_total: sub_total.parse().unwrap(),
                 tax: tax.parse().unwrap(),
                 discount: discount.parse().unwrap(),
+                total: total.parse().unwrap(),
                 created_at: row.get("created_at"),
             };
         })
@@ -245,7 +252,8 @@ pub async fn get_order_by_id(
     client: &Client,
 ) -> Option<Order> {
     let mut params: Vec<Box<dyn ToSql + Sync>> = vec![Box::new(order_id)];
-    let mut base_query = "select o.id, u.name as waiter_name, t.table_number, o.status, o.created_at from orders o inner join users u on u.id = o.waiter_id inner join tables t on o.table_id = t.id where u.deleted_at is null and o.deleted_at is null and t.deleted_at is null and o.id = $1".to_string();
+    let sub_total_query = "(select sum(price * quantity) from order_items where order_id = o.id)";
+    let mut base_query = format!("select o.id, u.name as waiter_name, t.table_number, o.status, o.tax::text, o.discount::text, coalesce({sub_total_query}, 0.0)::text as sub_total, coalesce({sub_total_query} - o.discount + o.tax, 0.0)::text as total, o.created_at from orders o inner join users u on u.id = o.waiter_id inner join tables t on o.table_id = t.id where u.deleted_at is null and o.deleted_at is null and t.deleted_at is null and o.id = $1");
     if role == "Manager" {
         params.push(Box::new(shop_id));
         base_query = format!("{base_query} and t.shop_id = ${}", params.len());
@@ -261,15 +269,19 @@ pub async fn get_order_by_id(
     let params_slice: Vec<&(dyn ToSql + Sync)> = params.iter().map(AsRef::as_ref).collect();
     match client.query_one(&base_query, &params_slice).await {
         Ok(row) => {
+            let sub_total: &str = row.get("sub_total");
             let tax: &str = row.get("tax");
             let discount: &str = row.get("discount");
+            let total: &str = row.get("total");
             Some(Order {
                 id: row.get("id"),
                 waiter_name: row.get("waiter_name"),
                 table_number: row.get("table_number"),
                 status: row.get("status"),
+                sub_total: sub_total.parse().unwrap(),
                 tax: tax.parse().unwrap(),
                 discount: discount.parse().unwrap(),
+                total: total.parse().unwrap(),
                 created_at: row.get("created_at"),
             })
         }
@@ -287,12 +299,11 @@ pub async fn update_order(
     discount: f64,
     client: &Client,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    client
-        .execute(
-            "update orders set status = $1, tax = $2, discount = $3 where id = $4",
-            &[&status, &tax, &discount, &order_id],
-        )
-        .await?;
+    let query = format!(
+        "update orders set status = $1, tax = {}, discount = {} where id = $2",
+        tax, discount
+    );
+    client.execute(&query, &[&status, &order_id]).await?;
     Ok(())
 }
 
