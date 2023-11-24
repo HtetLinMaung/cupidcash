@@ -60,6 +60,8 @@ pub struct Order {
     pub tax: f64,
     pub discount: f64,
     pub total: f64,
+    pub shop_name: String,
+    pub item_count: i64,
     pub created_at: NaiveDateTime,
 }
 
@@ -76,7 +78,7 @@ pub async fn get_orders(
     client: &Client,
 ) -> Result<PaginationResult<Order>, Error> {
     let mut params: Vec<Box<dyn ToSql + Sync>> = vec![];
-    let mut base_query = "from orders o inner join users u on u.id = o.waiter_id inner join tables t on o.table_id = t.id where u.deleted_at is null and o.deleted_at is null and t.deleted_at is null".to_string();
+    let mut base_query = "from orders o inner join users u on u.id = o.waiter_id inner join tables t on o.table_id = t.id left join shops s on s.id = u.shop_id where u.deleted_at is null and o.deleted_at is null and s.deleted_at is null and t.deleted_at is null".to_string();
     if role == "Manager" {
         params.push(Box::new(shop_id));
         base_query = format!("{base_query} and t.shop_id = ${}", params.len());
@@ -105,7 +107,7 @@ pub async fn get_orders(
     }
 
     let sub_total_query = "(select sum(price * quantity) from order_items where order_id = o.id)";
-    let select_columns = format!("o.id, u.name as waiter_name, t.table_number, o.status, o.tax::text, o.discount::text, coalesce({sub_total_query}, 0.0)::text as sub_total, coalesce({sub_total_query} - o.discount + o.tax, 0.0)::text as total, o.created_at");
+    let select_columns = format!("o.id, u.name as waiter_name, t.table_number, o.status, o.tax::text, o.discount::text, coalesce({sub_total_query}, 0.0)::text as sub_total, coalesce({sub_total_query} - o.discount + o.tax, 0.0)::text as total, coalesce(s.name, '') shop_name, (select count(*) from order_items where order_id = o.id) as item_count, o.created_at");
     let order_options = "o.created_at desc";
     let result = generate_pagination_query(PaginationOptions {
         select_columns: &select_columns,
@@ -150,6 +152,8 @@ pub async fn get_orders(
                 tax: tax.parse().unwrap(),
                 discount: discount.parse().unwrap(),
                 total: total.parse().unwrap(),
+                shop_name: row.get("shop_name"),
+                item_count: row.get("item_count"),
                 created_at: row.get("created_at"),
             };
         })
@@ -253,7 +257,7 @@ pub async fn get_order_by_id(
 ) -> Option<Order> {
     let mut params: Vec<Box<dyn ToSql + Sync>> = vec![Box::new(order_id)];
     let sub_total_query = "(select sum(price * quantity) from order_items where order_id = o.id)";
-    let mut base_query = format!("select o.id, u.name as waiter_name, t.table_number, o.status, o.tax::text, o.discount::text, coalesce({sub_total_query}, 0.0)::text as sub_total, coalesce({sub_total_query} - o.discount + o.tax, 0.0)::text as total, o.created_at from orders o inner join users u on u.id = o.waiter_id inner join tables t on o.table_id = t.id where u.deleted_at is null and o.deleted_at is null and t.deleted_at is null and o.id = $1");
+    let mut base_query = format!("select o.id, u.name as waiter_name, t.table_number, o.status, o.tax::text, o.discount::text, coalesce({sub_total_query}, 0.0)::text as sub_total, coalesce({sub_total_query} - o.discount + o.tax, 0.0)::text as total, coalesce(s.name, '') shop_name, (select count(*) from order_items where order_id = o.id) as item_count, o.created_at from orders o inner join users u on u.id = o.waiter_id inner join tables t on o.table_id = t.id left join shops s on s.id = u.shop_id where u.deleted_at is null and o.deleted_at is null and t.deleted_at is null and o.id = $1");
     if role == "Manager" {
         params.push(Box::new(shop_id));
         base_query = format!("{base_query} and t.shop_id = ${}", params.len());
@@ -282,6 +286,8 @@ pub async fn get_order_by_id(
                 tax: tax.parse().unwrap(),
                 discount: discount.parse().unwrap(),
                 total: total.parse().unwrap(),
+                shop_name: row.get("shop_name"),
+                item_count: row.get("item_count"),
                 created_at: row.get("created_at"),
             })
         }
