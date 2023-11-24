@@ -52,11 +52,13 @@ pub async fn create_order(
 
 #[derive(Serialize)]
 pub struct Order {
-    id: i32,
-    waiter_name: String,
-    table_number: String,
-    status: String,
-    created_at: NaiveDateTime,
+    pub id: i32,
+    pub waiter_name: String,
+    pub table_number: String,
+    pub status: String,
+    pub tax: f64,
+    pub discount: f64,
+    pub created_at: NaiveDateTime,
 }
 
 pub async fn get_orders(
@@ -102,7 +104,8 @@ pub async fn get_orders(
 
     let order_options = "o.created_at desc";
     let result = generate_pagination_query(PaginationOptions {
-        select_columns: "o.id, u.name as waiter_name, t.table_number, o.status, o.created_at",
+        select_columns:
+            "o.id, u.name as waiter_name, t.table_number, o.status, o.tax::text, o.discount::text, o.created_at",
         base_query: &base_query,
         search_columns: vec!["u.name", "t.table_number", "o.status", "o.id::varchar"],
         search: search.as_deref(),
@@ -129,12 +132,19 @@ pub async fn get_orders(
         .query(&result.query, &params_slice)
         .await?
         .iter()
-        .map(|row| Order {
-            id: row.get("id"),
-            waiter_name: row.get("waiter_name"),
-            table_number: row.get("table_number"),
-            status: row.get("status"),
-            created_at: row.get("created_at"),
+        .map(|row| {
+            let tax: &str = row.get("tax");
+            let discount: &str = row.get("discount");
+
+            return Order {
+                id: row.get("id"),
+                waiter_name: row.get("waiter_name"),
+                table_number: row.get("table_number"),
+                status: row.get("status"),
+                tax: tax.parse().unwrap(),
+                discount: discount.parse().unwrap(),
+                created_at: row.get("created_at"),
+            };
         })
         .collect();
 
@@ -250,13 +260,19 @@ pub async fn get_order_by_id(
     }
     let params_slice: Vec<&(dyn ToSql + Sync)> = params.iter().map(AsRef::as_ref).collect();
     match client.query_one(&base_query, &params_slice).await {
-        Ok(row) => Some(Order {
-            id: row.get("id"),
-            waiter_name: row.get("waiter_name"),
-            table_number: row.get("table_number"),
-            status: row.get("status"),
-            created_at: row.get("created_at"),
-        }),
+        Ok(row) => {
+            let tax: &str = row.get("tax");
+            let discount: &str = row.get("discount");
+            Some(Order {
+                id: row.get("id"),
+                waiter_name: row.get("waiter_name"),
+                table_number: row.get("table_number"),
+                status: row.get("status"),
+                tax: tax.parse().unwrap(),
+                discount: discount.parse().unwrap(),
+                created_at: row.get("created_at"),
+            })
+        }
         Err(err) => {
             println!("{:?}", err);
             None
@@ -267,22 +283,20 @@ pub async fn get_order_by_id(
 pub async fn update_order(
     order_id: i32,
     status: &str,
+    tax: f64,
+    discount: f64,
     client: &Client,
 ) -> Result<(), Box<dyn std::error::Error>> {
     client
         .execute(
-            "update orders set status = $1 where id = $2",
-            &[&status, &order_id],
+            "update orders set status = $1, tax = $2, discount = $3 where id = $4",
+            &[&status, &tax, &discount, &order_id],
         )
         .await?;
     Ok(())
 }
 
-
-pub async fn order_exists_in_table(
-    table_id: &i32,
-    client: &Client,
-) -> Result<bool, Error> {
+pub async fn order_exists_in_table(table_id: &i32, client: &Client) -> Result<bool, Error> {
     // Execute a query to check if the order is not completed or canceled exists in the request table
     let row = client
         .query_one(

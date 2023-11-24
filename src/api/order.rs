@@ -334,6 +334,8 @@ pub async fn get_order_by_id(
 #[derive(Deserialize)]
 pub struct UpdateOrderRequest {
     pub status: String,
+    pub tax: Option<f64>,
+    pub discount: Option<f64>,
 }
 
 #[put("/api/orders/{order_id}")]
@@ -408,19 +410,32 @@ pub async fn update_order(
     }
 
     match order::get_order_by_id(order_id, user_id, shop_id, role, &client).await {
-        Some(_) => match order::update_order(order_id, &body.status, &client).await {
-            Ok(()) => HttpResponse::Ok().json(BaseResponse {
-                code: 200,
-                message: String::from("Order updated successfully"),
-            }),
-            Err(e) => {
-                eprintln!("Order updating error: {}", e);
-                return HttpResponse::InternalServerError().json(BaseResponse {
-                    code: 500,
-                    message: String::from("Error updating order!"),
-                });
+        Some(o) => {
+            let mut tax = o.tax;
+            let mut discount = o.discount;
+            if &body.status == "Completed" {
+                if let Some(t) = body.tax {
+                    tax = t;
+                }
+                if let Some(d) = body.discount {
+                    discount = d;
+                }
             }
-        },
+
+            match order::update_order(order_id, &body.status, tax, discount, &client).await {
+                Ok(()) => HttpResponse::Ok().json(BaseResponse {
+                    code: 200,
+                    message: String::from("Order updated successfully"),
+                }),
+                Err(e) => {
+                    eprintln!("Order updating error: {}", e);
+                    return HttpResponse::InternalServerError().json(BaseResponse {
+                        code: 500,
+                        message: String::from("Error updating order!"),
+                    });
+                }
+            }
+        }
         None => HttpResponse::NotFound().json(BaseResponse {
             code: 404,
             message: String::from("Order not found!"),
