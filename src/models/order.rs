@@ -309,11 +309,12 @@ pub async fn update_order(
     status: &str,
     tax: f64,
     discount: f64,
+    total: f64,
     client: &Client,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let query = format!(
-        "update orders set status = $1, tax = {}, discount = {} where id = $2",
-        tax, discount
+        "update orders set status = $1, tax = {}, discount = {}, total= {} where id = $2",
+        tax, discount, total
     );
     client.execute(&query, &[&status, &order_id]).await?;
     Ok(())

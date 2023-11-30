@@ -154,6 +154,7 @@ CREATE TABLE orders
     status VARCHAR(50) DEFAULT 'Pending',
     discount DECIMAL(10, 2) DEFAULT 0.0,
     tax DECIMAL(10, 2) DEFAULT 0.0,
+    total DECIMAL(10, 2) DEFAULT 0.0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     deleted_at TIMESTAMP DEFAULT null
 );
