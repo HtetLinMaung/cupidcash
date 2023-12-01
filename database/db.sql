@@ -155,6 +155,7 @@ CREATE TABLE orders
     discount DECIMAL(10, 2) DEFAULT 0.0,
     tax DECIMAL(10, 2) DEFAULT 0.0,
     total DECIMAL(10, 2) DEFAULT 0.0,
+    payment_type VARCHAR(10) DEFAULT 'CASH',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     deleted_at TIMESTAMP DEFAULT null
 );
