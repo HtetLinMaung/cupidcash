@@ -5,7 +5,10 @@ use serde::Deserialize;
 use tokio_postgres::Client;
 
 use crate::{
-    models::item::{self, ItemRequest},
+    models::{
+        discount_type::{self, DiscountTypeRequest},
+        item,
+    },
     utils::{
         common_struct::{BaseResponse, DataResponse, PaginationResponse},
         jwt::verify_token_and_get_sub,
@@ -13,18 +16,17 @@ use crate::{
 };
 
 #[derive(Deserialize)]
-pub struct GetItemsQuery {
+pub struct GetCategoriesQuery {
     pub search: Option<String>,
-    pub category_id: Option<i32>,
     pub page: Option<usize>,
     pub per_page: Option<usize>,
 }
 
-#[get("/api/items")]
-pub async fn get_items(
+#[get("/api/discount_types")]
+pub async fn get_discount_types(
     req: HttpRequest,
     client: web::Data<Arc<Client>>,
-    query: web::Query<GetItemsQuery>,
+    query: web::Query<GetCategoriesQuery>,
 ) -> impl Responder {
     // Extract the token from the Authorization header
     let token = match req.headers().get("Authorization") {
@@ -66,16 +68,16 @@ pub async fn get_items(
         });
     }
 
-    // let user_id: &str = parsed_values[0];
+    // let user_id: i32 = parsed_values[0].parse().unwrap();
     let role: &str = parsed_values[1];
     let shop_id: i32 = parsed_values[2].parse().unwrap();
-    match item::get_items(
+
+    match discount_type::get_discount_types(
         &query.search,
         query.page,
         query.per_page,
-        shop_id,
-        query.category_id,
         role,
+        shop_id,
         &client,
     )
     .await
@@ -91,19 +93,19 @@ pub async fn get_items(
         }),
         Err(err) => {
             // Log the error message here
-            println!("Error retrieving items: {:?}", err);
+            println!("Error retrieving discount_types: {:?}", err);
             HttpResponse::InternalServerError().json(BaseResponse {
                 code: 500,
-                message: String::from("Error trying to read all items from database"),
+                message: String::from("Error trying to read all discount_types from database"),
             })
         }
     }
 }
 
-#[post("/api/items")]
-pub async fn add_item(
+#[post("/api/discount_types")]
+pub async fn add_discount_type(
     req: HttpRequest,
-    body: web::Json<ItemRequest>,
+    body: web::Json<DiscountTypeRequest>,
     client: web::Data<Arc<Client>>,
 ) -> HttpResponse {
     // Extract the token from the Authorization header
@@ -146,22 +148,16 @@ pub async fn add_item(
         });
     }
 
-    // let user_id = parsed_values[0].parse().unwrap();
+    // let user_id: i32 = parsed_values[0].parse().unwrap();
     let role: &str = parsed_values[1];
 
-    if role == "Waiter" {
+    if role != "Admin" && role != "Manager" {
         return HttpResponse::Unauthorized().json(BaseResponse {
             code: 401,
             message: String::from("Unauthorized!"),
         });
     }
 
-    if body.name.is_empty() {
-        return HttpResponse::BadRequest().json(BaseResponse {
-            code: 400,
-            message: String::from("Name must not be empty!"),
-        });
-    }
     if body.description.is_empty() {
         return HttpResponse::BadRequest().json(BaseResponse {
             code: 400,
@@ -169,70 +165,28 @@ pub async fn add_item(
         });
     }
 
-    if body.price.is_sign_negative() {
-        return HttpResponse::BadRequest().json(BaseResponse {
-            code: 400,
-            message: String::from("Price must not be negative!"),
-        });
-    }
-
-    if body.discount_type.is_empty() {
-        return HttpResponse::BadRequest().json(BaseResponse {
-            code: 400,
-            message: String::from("Discount type must not be empty!"),
-        });
-    } else {
-        if body.discount_type == "Discount by Specific Percentage" {
-            if body.discount_percent.is_sign_negative() {
-                return HttpResponse::BadRequest().json(BaseResponse {
-                    code: 400,
-                    message: String::from("Discount percent must not be negative!"),
-                });
-            }
-            if body.discount_expiration.is_none() {
-                return HttpResponse::BadRequest().json(BaseResponse {
-                    code: 400,
-                    message: String::from("Discount expire data must not be empty!"),
-                });
-            }
-        } else if body.discount_type == "Discount by Specific Amount" {
-            if body.discounted_price.is_sign_negative() {
-                return HttpResponse::BadRequest().json(BaseResponse {
-                    code: 400,
-                    message: String::from("Discounted price must not be negative!"),
-                });
-            }
-        }
-        if body.discount_type!="No Discount" && body.discount_reason.is_empty() {
-            return HttpResponse::BadRequest().json(BaseResponse {
-                code: 400,
-                message: String::from("Discount reason must not be empty!"),
-            });
-        }
-    }
-
-    match item::add_item(&body, &client).await {
+    match discount_type::add_discount_type(&body, &client).await {
         Ok(()) => HttpResponse::Created().json(BaseResponse {
             code: 201,
-            message: String::from("Item added successfully"),
+            message: String::from("DiscountType added successfully"),
         }),
         Err(e) => {
-            eprintln!("Item adding error: {}", e);
+            eprintln!("DiscountType adding error: {}", e);
             return HttpResponse::InternalServerError().json(BaseResponse {
                 code: 500,
-                message: String::from("Error adding item!"),
+                message: String::from("Error adding discount_type!"),
             });
         }
     }
 }
 
-#[get("/api/items/{item_id}")]
-pub async fn get_item_by_id(
+#[get("/api/discount_types/{discount_type_id}")]
+pub async fn get_discount_type_by_id(
     req: HttpRequest,
     path: web::Path<i32>,
     client: web::Data<Arc<Client>>,
 ) -> HttpResponse {
-    let item_id = path.into_inner();
+    let discount_type_id = path.into_inner();
     // Extract the token from the Authorization header
     let token = match req.headers().get("Authorization") {
         Some(value) => {
@@ -273,29 +227,36 @@ pub async fn get_item_by_id(
         });
     }
 
-    // let role: &str = parsed_values[1];
+    let role: &str = parsed_values[1];
 
-    match item::get_item_by_id(item_id, &client).await {
+    if role != "Admin" && role != "Manager" {
+        return HttpResponse::Unauthorized().json(BaseResponse {
+            code: 401,
+            message: String::from("Unauthorized!"),
+        });
+    }
+
+    match discount_type::get_discount_type_by_id(discount_type_id, &client).await {
         Some(c) => HttpResponse::Ok().json(DataResponse {
             code: 200,
-            message: String::from("Item fetched successfully."),
+            message: String::from("DiscountType fetched successfully."),
             data: Some(c),
         }),
         None => HttpResponse::NotFound().json(BaseResponse {
             code: 404,
-            message: String::from("Item not found!"),
+            message: String::from("DiscountType not found!"),
         }),
     }
 }
 
-#[put("/api/items/{item_id}")]
-pub async fn update_item(
+#[put("/api/discount_types/{discount_type_id}")]
+pub async fn update_discount_type(
     req: HttpRequest,
     path: web::Path<i32>,
-    body: web::Json<ItemRequest>,
+    body: web::Json<DiscountTypeRequest>,
     client: web::Data<Arc<Client>>,
 ) -> HttpResponse {
-    let item_id = path.into_inner();
+    let discount_type_id = path.into_inner();
     // Extract the token from the Authorization header
     let token = match req.headers().get("Authorization") {
         Some(value) => {
@@ -338,17 +299,10 @@ pub async fn update_item(
 
     let role: &str = parsed_values[1];
 
-    if role == "Waiter" {
+    if role != "Admin" && role != "Manager" {
         return HttpResponse::Unauthorized().json(BaseResponse {
             code: 401,
             message: String::from("Unauthorized!"),
-        });
-    }
-
-    if body.name.is_empty() {
-        return HttpResponse::BadRequest().json(BaseResponse {
-            code: 400,
-            message: String::from("Name must not be empty!"),
         });
     }
     if body.description.is_empty() {
@@ -358,76 +312,34 @@ pub async fn update_item(
         });
     }
 
-    if body.price.is_sign_negative() {
-        return HttpResponse::BadRequest().json(BaseResponse {
-            code: 400,
-            message: String::from("Price must not be negative!"),
-        });
-    }
-
-    if body.discount_type.is_empty() {
-        return HttpResponse::BadRequest().json(BaseResponse {
-            code: 400,
-            message: String::from("Discount type must not be empty!"),
-        });
-    } else {
-        if body.discount_type == "Discount by Specific Percentage" {
-            if body.discount_percent.is_sign_negative() {
-                return HttpResponse::BadRequest().json(BaseResponse {
-                    code: 400,
-                    message: String::from("Discount percent must not be negative!"),
-                });
-            }
-            if body.discount_expiration.is_none() {
-                return HttpResponse::BadRequest().json(BaseResponse {
-                    code: 400,
-                    message: String::from("Discount expire data must not be empty!"),
-                });
-            }
-        } else if body.discount_type == "Discount by Specific Amount" {
-            if body.discounted_price.is_sign_negative() {
-                return HttpResponse::BadRequest().json(BaseResponse {
-                    code: 400,
-                    message: String::from("Discounted price must not be negative!"),
-                });
-            }
-        }
-        if body.discount_type!="No Discount" && body.discount_reason.is_empty() {
-            return HttpResponse::BadRequest().json(BaseResponse {
-                code: 400,
-                message: String::from("Discount reason must not be empty!"),
-            });
-        }
-    }
-
-    match item::get_item_by_id(item_id, &client).await {
-        Some(i) => match item::update_item(item_id, &i.image_url, &body, &client).await {
+    match discount_type::get_discount_type_by_id(discount_type_id, &client).await {
+        Some(_) => match discount_type::update_discount_type(discount_type_id, &body, &client).await {
             Ok(()) => HttpResponse::Ok().json(BaseResponse {
                 code: 200,
-                message: String::from("Item updated successfully"),
+                message: String::from("DiscountType updated successfully"),
             }),
             Err(e) => {
-                eprintln!("Item updating error: {}", e);
+                eprintln!("DiscountType updating error: {}", e);
                 return HttpResponse::InternalServerError().json(BaseResponse {
                     code: 500,
-                    message: String::from("Error updating item!"),
+                    message: String::from("Error updating discount_type!"),
                 });
             }
         },
         None => HttpResponse::NotFound().json(BaseResponse {
             code: 404,
-            message: String::from("Item not found!"),
+            message: String::from("DiscountType not found!"),
         }),
     }
 }
 
-#[delete("/api/items/{item_id}")]
-pub async fn delete_item(
+#[delete("/api/discount_types/{discount_type_id}")]
+pub async fn delete_discount_type(
     req: HttpRequest,
     path: web::Path<i32>,
     client: web::Data<Arc<Client>>,
 ) -> HttpResponse {
-    let item_id = path.into_inner();
+    let discount_type_id = path.into_inner();
     // Extract the token from the Authorization header
     let token = match req.headers().get("Authorization") {
         Some(value) => {
@@ -470,30 +382,50 @@ pub async fn delete_item(
 
     let role: &str = parsed_values[1];
 
-    if role == "Waiter" {
+    if role != "Admin" && role != "Manager" {
         return HttpResponse::Unauthorized().json(BaseResponse {
             code: 401,
             message: String::from("Unauthorized!"),
         });
     }
 
-    match item::get_item_by_id(item_id, &client).await {
-        Some(i) => match item::delete_item(item_id, &i.image_url, &client).await {
-            Ok(()) => HttpResponse::Ok().json(BaseResponse {
-                code: 204,
-                message: String::from("Item deleted successfully"),
-            }),
-            Err(e) => {
-                eprintln!("Item deleting error: {}", e);
+    match discount_type::get_discount_type_by_id(discount_type_id, &client).await {
+        Some(d) => match item::is_items_exist_for_discount_type(&d.description, &d.shop_id, &client).await {
+            Ok(is_exist) => {
+                if is_exist {
+                    return HttpResponse::BadRequest().json(BaseResponse {
+                        code: 400,
+                        message: String::from("Please delete the associated items first before deleting the discount_type. Ensure all products related to this discount_type are removed to proceed with discount_type deletion!"),
+                    });
+                } else {
+                    match discount_type::delete_discount_type(discount_type_id, &client).await {
+                        Ok(()) => {
+                            return HttpResponse::Ok().json(BaseResponse {
+                                code: 204,
+                                message: String::from("DiscountType deleted successfully"),
+                            });
+                        }
+                        Err(e) => {
+                            eprintln!("DiscountType deleting error: {}", e);
+                            return HttpResponse::InternalServerError().json(BaseResponse {
+                                code: 500,
+                                message: String::from("Error deleting discount_type!"),
+                            });
+                        }
+                    }
+                }
+            }
+            Err(err) => {
+                println!("{:?}", err);
                 return HttpResponse::InternalServerError().json(BaseResponse {
-                    code: 500,
-                    message: String::from("Error deleting item!"),
+                    code: 400,
+                    message: String::from("Something went wrong with checking items existence!"),
                 });
             }
         },
         None => HttpResponse::NotFound().json(BaseResponse {
             code: 404,
-            message: String::from("Item not found!"),
+            message: String::from("DiscountType not found!"),
         }),
-    }
+    }    
 }

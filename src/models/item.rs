@@ -378,3 +378,15 @@ pub async fn is_items_exist_for_shop(
     let total: i64 = row.get("total");
     Ok(total > 0)
 }
+
+pub async fn is_items_exist_for_discount_type(
+    discount_type: &str,
+    shop_id: &i32,
+    client: &Client,
+) -> Result<bool, Box<dyn std::error::Error>> {
+    let query =
+        format!("select count(*) as total from items where shop_id = $1 and discount_type=$2 and deleted_at is null");
+    let row = client.query_one(&query, &[&shop_id, &discount_type]).await?;
+    let total: i64 = row.get("total");
+    Ok(total > 0)
+}

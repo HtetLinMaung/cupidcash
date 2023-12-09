@@ -192,15 +192,15 @@ CREATE TABLE transaction_reports
 
 CREATE TABLE discount_types
 (
-    discount_type_id SERIAL PRIMARY KEY,
+    id SERIAL PRIMARY KEY,
     description VARCHAR(255) NOT NULL,
+    shop_id INTEGER REFERENCES shops(id),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     deleted_at TIMESTAMP DEFAULT NULL
 );
 
-INSERT INTO discount_types (description) 
-VALUES ('No Discount'),('Discount by Specific Percentage'),
-('Discount by Specific Amount');
+INSERT INTO discount_types (description, shop_id) 
+VALUES ('No Discount',2),('Discount by Specific Percentage',2),
+('Discount by Specific Amount',2);
 -- Future tables (like feedback, loyalty programs) can be added based on requirements
 

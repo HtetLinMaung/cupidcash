@@ -5,3 +5,4 @@ pub mod role;
 pub mod shop;
 pub mod table;
 pub mod user;
+pub mod discount_type;

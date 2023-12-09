@@ -7,6 +7,7 @@ mod role;
 mod shop;
 mod table;
 mod user;
+mod discount_type;
 
 use actix_web::web;
 
@@ -46,4 +47,9 @@ pub fn init(cfg: &mut web::ServiceConfig) {
     cfg.service(table::update_table);
     cfg.service(table::delete_table);
     cfg.service(image::upload);
+    cfg.service(discount_type::get_discount_types);
+    cfg.service(discount_type::add_discount_type);
+    cfg.service(discount_type::get_discount_type_by_id);
+    cfg.service(discount_type::update_discount_type);
+    cfg.service(discount_type::delete_discount_type);
 }
