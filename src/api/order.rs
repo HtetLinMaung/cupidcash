@@ -335,8 +335,7 @@ pub async fn get_order_by_id(
 pub struct UpdateOrderRequest {
     pub status: String,
     pub tax: Option<f64>,
-    pub discount: Option<f64>,
-    pub total: Option<f64>,
+    pub discount: Option<f64>
 }
 
 #[put("/api/orders/{order_id}")]
@@ -414,7 +413,6 @@ pub async fn update_order(
         Some(o) => {
             let mut tax = o.tax;
             let mut discount = o.discount;
-            let mut total = o.total;
             if &body.status == "Completed" {
                 if let Some(t) = body.tax {
                     tax = t;
@@ -422,12 +420,9 @@ pub async fn update_order(
                 if let Some(d) = body.discount {
                     discount = d;
                 }
-                if let Some(t) = body.total {
-                    total = t;
-                }
             }
 
-            match order::update_order(order_id, &body.status, tax, discount, total, &client).await {
+            match order::update_order(order_id, &body.status, tax, discount, &client).await {
                 Ok(()) => HttpResponse::Ok().json(BaseResponse {
                     code: 200,
                     message: String::from("Order updated successfully"),

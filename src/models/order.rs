@@ -16,6 +16,60 @@ pub struct NewOrder {
     pub items: Vec<NewOrderItem>,
 }
 
+#[derive(Debug)]
+struct ItemData {
+    price: String,
+    original_price: f64,
+}
+
+// Function to retrieve item data from the database
+async fn get_item_data(client: &tokio_postgres::Client, item_id: i32) -> Result<ItemData, tokio_postgres::Error> {
+    client
+        .query_one(
+            "SELECT 
+                CASE
+                    WHEN discount_type = 'No Discount' THEN price::text
+                    WHEN discount_type = 'Discount by Specific Amount' THEN discounted_price::text
+                    ELSE
+                        CASE
+                            WHEN discount_expiration IS NULL THEN (price - (price * discount_percent / 100))::text
+                            WHEN NOW() >= discount_expiration THEN price::text
+                            ELSE (price - (price * discount_percent / 100))::text
+                        END
+                END AS price,
+                COALESCE(price, '0.0')::float8 AS original_price
+            FROM items
+            WHERE id = $1 AND deleted_at IS NULL",
+            &[&item_id],
+        )
+        .await
+        .map(|row| ItemData {
+            price: row.get("price"),
+            original_price: row.get("original_price"),
+        })
+}
+
+// Function to insert order items
+async fn insert_order_item(
+    client: &tokio_postgres::Client,
+    order_id: i32,
+    item_id: i32,
+    quantity: i32,
+    special_instructions: &str,
+    price: f64,
+    original_price: f64,
+) -> Result<(), tokio_postgres::Error> {
+    let query = format!("INSERT INTO order_items (order_id, item_id, quantity, special_instructions, price, original_price) 
+    VALUES ($1, $2, $3, $4, {},{})", &price, &original_price);
+    client
+        .execute(
+            &query,
+            &[&order_id, &item_id, &quantity, &special_instructions],
+        )
+        .await
+        .map(|_| ())
+}
+
 #[derive(Deserialize, Debug, Clone, Serialize)]
 pub struct NewOrderItem {
     pub item_id: i32,
@@ -39,14 +93,22 @@ pub async fn create_order(
         )
         .await?;
     let id: i32 = row.get("id");
-
     for item in order.items {
-        client.execute(
-            "insert into order_items (order_id, item_id, quantity, price, special_instructions) VALUES (currval(pg_get_serial_sequence('orders', 'id')), $1, $2,(select coalesce(price, 0.0) from items where id= $3 and deleted_at is null), $4)",
-            &[&item.item_id, &item.quantity, &item.item_id,&item.special_instructions]
-        ).await?;
+        // Retrieve item data from the database
+        let item_data = get_item_data(&client, item.item_id).await?;
+    
+        // Insert order item using retrieved data
+        insert_order_item(
+            &client,
+            id,
+            item.item_id,
+            item.quantity,
+            &item.special_instructions,
+            item_data.price.parse().unwrap_or_default(),
+            item_data.original_price,
+        )
+        .await?;
     }
-
     Ok(id)
 }
 
@@ -189,6 +251,7 @@ pub struct OrderItem {
     item_name: String,
     description: String,
     price: f64,
+    original_price: f64,
     image_url: String,
     quantity: i32,
     special_instructions: String,
@@ -223,7 +286,7 @@ pub async fn get_order_detail(
     // Assume there's another table called order_items linking orders to items.
     let item_rows = client
         .query(
-            "SELECT i.name as item_name, i.description, oi.price::text, i.image_url, oi.quantity, oi.special_instructions FROM order_items oi inner join items i on oi.item_id = i.id WHERE order_id = $1 and i.deleted_at is null order by i.name",
+            "SELECT i.name as item_name, i.description, oi.price::text, oi.original_price::text, i.image_url, oi.quantity, oi.special_instructions FROM order_items oi inner join items i on oi.item_id = i.id WHERE order_id = $1 and i.deleted_at is null order by i.name",
             &[&order_id],
         )
         .await?;
@@ -233,10 +296,13 @@ pub async fn get_order_detail(
         .map(|row| {
             let price: &str = row.get("price");
             let price: f64 = price.parse().unwrap();
+            let original_price: &str = row.get("original_price");
+            let original_price: f64 = original_price.parse().unwrap();
             OrderItem {
                 item_name: row.get("item_name"),
                 description: row.get("description"),
                 price,
+                original_price,
                 image_url: row.get("image_url"),
                 quantity: row.get("quantity"),
                 special_instructions: row.get("special_instructions"),
@@ -309,12 +375,11 @@ pub async fn update_order(
     status: &str,
     tax: f64,
     discount: f64,
-    total: f64,
     client: &Client,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let query = format!(
-        "update orders set status = $1, tax = {}, discount = {}, total= {} where id = $2",
-        tax, discount, total
+        "update orders set status = $1, tax = {}, discount = {} where id = $2",
+        tax, discount
     );
     client.execute(&query, &[&status, &order_id]).await?;
     Ok(())

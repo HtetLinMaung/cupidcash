@@ -85,6 +85,11 @@ CREATE TABLE items
     price DECIMAL(10, 2) NOT NULL,
     image_url TEXT,
     shop_id INTEGER REFERENCES shops(id),
+    discount_percent DECIMAL(10, 2) DEFAULT 0,
+    discount_expiration TIMESTAMP DEFAULT null,
+    discount_reason TEXT DEFAULT '',
+    discounted_price DECIMAL(18, 2) DEFAULT 0.0,
+    discount_type VARCHAR(255) DEFAULT 'No Discount',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     deleted_at TIMESTAMP DEFAULT null
 );
@@ -168,6 +173,7 @@ CREATE TABLE order_items
     price DECIMAL(10, 2) DEFAULT 0.0,
     quantity INTEGER NOT NULL,
     special_instructions TEXT,
+    original_price DECIMAL(10, 2) DEFAULT 0.0,
     PRIMARY KEY(order_id, item_id)
 );
 
@@ -184,5 +190,17 @@ CREATE TABLE transaction_reports
     deleted_at TIMESTAMP DEFAULT null
 );
 
+CREATE TABLE discount_types
+(
+    discount_type_id SERIAL PRIMARY KEY,
+    description VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP DEFAULT NULL
+);
+
+INSERT INTO discount_types (description) 
+VALUES ('No Discount'),('Discount by Specific Percentage'),
+('Discount by Specific Amount');
 -- Future tables (like feedback, loyalty programs) can be added based on requirements
 

@@ -22,6 +22,11 @@ pub struct Item {
     pub price: f64,
     pub image_url: String,
     pub shop_id: i32,
+    pub discount_percent: f64,
+    discount_expiration: Option<NaiveDateTime>,
+    discount_reason: String,
+    discounted_price: f64,
+    discount_type: String,
     pub shop_name: String,
     pub created_at: NaiveDateTime,
     pub categories: Vec<ItemCategory>,
@@ -57,9 +62,14 @@ pub async fn get_items(
     };
 
     let result = generate_pagination_query(PaginationOptions {
-        select_columns: "i.id, i.name, i.description, i.price::text, i.image_url, i.shop_id, s.name shop_name, i.created_at",
+        select_columns: "i.id, i.name, i.description, i.price::text, i.image_url, i.shop_id, s.name shop_name, i.created_at, i.discount_percent::text, i.discount_expiration, i.discount_reason, 
+        case when i.discount_type = 'No Discount' then i.price::text 
+            when i.discount_type = 'Discount by Specific Amount' then i.discounted_price::text 
+            else case when i.discount_expiration is null then (i.price - (i.price * i.discount_percent / 100))::text 
+            when now() >= i.discount_expiration then i.price::text else (i.price - (i.price * i.discount_percent / 100))::text end end as discounted_price, 
+        i.discount_type",
         base_query: &base_query,
-        search_columns: vec!["i.name", "i.description", "i.price::text", "s.name"],
+        search_columns: vec!["i.name", "i.description", "i.price::text", "s.name", "i.discount_percent::text", "i.discount_reason", "i.discounted_price::text", "i.discount_type"],
         search: search.as_deref(),
         order_options: Some(&order_options),
         page,
@@ -90,6 +100,8 @@ pub async fn get_items(
         let category_rows = client.query("select ic.category_id, c.name from item_categories ic join categories c on c.id = ic.category_id where ic.item_id = $1", &[&item_id]).await?;
 
         let price_str: &str = row.get("price");
+        let discount_percent_str: &str = row.get("discount_percent");
+        let discounted_price_str: &str = row.get("discounted_price");
         items.push(Item {
             id: item_id,
             name: row.get("name"),
@@ -106,6 +118,11 @@ pub async fn get_items(
                 })
                 .collect(),
             created_at: row.get("created_at"),
+            discount_percent: discount_percent_str.parse().unwrap(),
+            discount_expiration: row.get("discount_expiration"),
+            discount_reason: row.get("discount_reason"),
+            discounted_price: discounted_price_str.parse().unwrap(), // Assuming the "discounted_price" column is of type f64
+            discount_type: row.get("discount_type"),
         });
     }
 
@@ -126,13 +143,22 @@ pub struct ItemRequest {
     pub categories: Vec<i32>,
     pub image_url: String,
     pub shop_id: i32,
+    pub discount_percent: f64,
+    pub discount_expiration: Option<NaiveDateTime>,
+    pub discount_reason: String,
+    pub discounted_price: f64,
+    pub discount_type: String,
 }
 
 pub async fn add_item(
     data: &ItemRequest,
     client: &Client,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let query = format!("insert into items (name, description, price, image_url, shop_id) values ($1, $2, {}, $3, $4) returning id", data.price);
+    let query = format!(
+        "INSERT INTO items (name, description, price, image_url, shop_id, discount_percent, discount_expiration, discount_reason, discounted_price, discount_type) VALUES ($1, $2, {}, $3, $4, {}, $5, $6, {}, $7) RETURNING id",
+        data.price,data.discount_percent,data.discounted_price,
+    );
+
     let row = client
         .query_one(
             &query,
@@ -141,6 +167,9 @@ pub async fn add_item(
                 &data.description,
                 &data.image_url,
                 &data.shop_id,
+                &data.discount_expiration,
+                &data.discount_reason,
+                &data.discount_type,
             ],
         )
         .await?;
@@ -149,7 +178,7 @@ pub async fn add_item(
     for category_id in &data.categories {
         client
             .execute(
-                "insert into item_categories (item_id, category_id) values ($1, $2)",
+                "INSERT INTO item_categories (item_id, category_id) VALUES ($1, $2)",
                 &[&id, &category_id],
             )
             .await?;
@@ -161,15 +190,26 @@ pub async fn add_item(
 pub async fn get_item_by_id(item_id: i32, client: &Client) -> Option<Item> {
     let result = client
         .query_one(
-            "select i.id, i.name, i.description, i.price::text, i.image_url, i.shop_id, s.name shop_name, i.created_at from items i join shops s on i.shop_id = s.id where i.deleted_at is null and i.id = $1",
+            "SELECT i.id, i.name, i.description, i.price::text, i.image_url, i.shop_id, s.name shop_name, i.created_at, i.discount_percent::text, i.discount_expiration, i.discount_reason, 
+            case when i.discount_type = 'No Discount' then i.price::text 
+            when i.discount_type = 'Discount by Specific Amount' then i.discounted_price::text 
+            else case when i.discount_expiration is null then (i.price - (i.price * i.discount_percent / 100))::text 
+            when now() >= i.discount_expiration then i.price::text else (i.price - (i.price * i.discount_percent / 100))::text end end as discounted_price, 
+            i.discount_type FROM items i JOIN shops s ON i.shop_id = s.id WHERE i.deleted_at IS NULL AND i.id = $1",
             &[&item_id],
         )
         .await;
 
-    let category_rows = match client.query("select ic.category_id, c.name from item_categories ic join categories c on c.id = ic.category_id where ic.item_id = $1", &[&item_id]).await {
+    let category_rows = match client
+        .query(
+            "SELECT ic.category_id, c.name FROM item_categories ic JOIN categories c ON c.id = ic.category_id WHERE ic.item_id = $1",
+            &[&item_id],
+        )
+        .await
+    {
         Ok(rows) => rows,
         Err(err) => {
-            println!("{:?}",err);
+            println!("{:?}", err);
             vec![]
         }
     };
@@ -177,6 +217,8 @@ pub async fn get_item_by_id(item_id: i32, client: &Client) -> Option<Item> {
     match result {
         Ok(row) => {
             let price_str: &str = row.get("price");
+            let discount_percent_str: &str = row.get("discount_percent");
+            let discounted_price_str: &str = row.get("discounted_price");
             Some(Item {
                 id: item_id,
                 name: row.get("name"),
@@ -193,6 +235,12 @@ pub async fn get_item_by_id(item_id: i32, client: &Client) -> Option<Item> {
                     })
                     .collect(),
                 created_at: row.get("created_at"),
+                // Add the new fields for discount-related columns
+                discount_percent: discount_percent_str.parse().unwrap(),
+                discount_expiration: row.get("discount_expiration"),
+                discount_reason: row.get("discount_reason"),
+                discounted_price: discounted_price_str.parse().unwrap(),
+                discount_type: row.get("discount_type"),
             })
         }
         Err(_) => None,
@@ -205,7 +253,8 @@ pub async fn update_item(
     data: &ItemRequest,
     client: &Client,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let query = format!("update items set name = $1, description = $2, price = {}, image_url = $3, shop_id = $4 where id = $5", data.price);
+    let query = format!("UPDATE items SET name = $1, description = $2, price = {}, image_url = $3, shop_id = $4, discount_percent = {}, discount_expiration = $5, discount_reason = $6, discounted_price = {}, discount_type = $7 WHERE id = $8",
+    data.price, data.discount_percent, data.discounted_price);
     client
         .execute(
             &query,
@@ -214,29 +263,35 @@ pub async fn update_item(
                 &data.description,
                 &data.image_url,
                 &data.shop_id,
+                &data.discount_expiration,
+                &data.discount_reason,
+                &data.discount_type,
                 &item_id,
             ],
         )
         .await?;
     client
         .execute(
-            "delete from item_categories where item_id = $1",
+            "DELETE FROM item_categories WHERE item_id = $1",
             &[&item_id],
         )
         .await?;
+
     for category_id in &data.categories {
         client
             .execute(
-                "insert into item_categories (item_id, category_id) values ($1, $2)",
+                "INSERT INTO item_categories (item_id, category_id) VALUES ($1, $2)",
                 &[&item_id, &category_id],
             )
             .await?;
     }
+
     if old_image_url != &data.image_url {
         match fs::remove_file(old_image_url) {
             Ok(_) => println!("File deleted successfully!"),
             Err(e) => println!("Error deleting file: {}", e),
         };
+
         let path = Path::new(&old_image_url);
         let stem = path
             .file_stem()
@@ -246,6 +301,7 @@ pub async fn update_item(
             .extension()
             .and_then(|s| s.to_str())
             .unwrap_or_default();
+
         match fs::remove_file(format!("{stem}_original.{extension}")) {
             Ok(_) => println!("Original file deleted successfully!"),
             Err(e) => println!("Error deleting original file: {}", e),
@@ -316,7 +372,8 @@ pub async fn is_items_exist_for_shop(
     shop_id: i32,
     client: &Client,
 ) -> Result<bool, Box<dyn std::error::Error>> {
-    let query = format!("select count(*) as total from items where shop_id = $1 and deleted_at is null");
+    let query =
+        format!("select count(*) as total from items where shop_id = $1 and deleted_at is null");
     let row = client.query_one(&query, &[&shop_id]).await?;
     let total: i64 = row.get("total");
     Ok(total > 0)
