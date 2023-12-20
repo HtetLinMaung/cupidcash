@@ -52,4 +52,6 @@ pub fn init(cfg: &mut web::ServiceConfig) {
     cfg.service(discount_type::get_discount_type_by_id);
     cfg.service(discount_type::update_discount_type);
     cfg.service(discount_type::delete_discount_type);
+    cfg.service(order::get_daily_sale_report);
+    cfg.service(order::download_daily_sale_report);
 }

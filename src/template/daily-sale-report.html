@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Daily Sale Report</title>
+    <style>
+        .total{
+            width: 30.8%;
+            text-align: center;
+            border-left: 1px solid rgb(229 231 235 / var(--tw-bg-opacity));
+            border-bottom: 1px solid rgb(229 231 235 / var(--tw-bg-opacity));
+            border-right: 1px solid rgb(229 231 235 / var(--tw-bg-opacity));
+        }
+        td:nth-child(1){
+            text-align: center;
+            width: 5%;
+        }
+        td:nth-child(2){
+            text-align: left;
+            width: 25%;
+        }
+        td:nth-child(3), .total_quantity{
+            width: 15%;
+            text-align: right;
+            border-right: 1px solid rgb(229 231 235 / var(--tw-bg-opacity));
+            border-bottom: 1px solid rgb(229 231 235 / var(--tw-bg-opacity));
+        }
+        td:nth-child(4), td:nth-child(5), td:nth-child(6), .total_amount{
+            width: 16.7%;
+            text-align: right;
+            border-right: 1px solid rgb(229 231 235 / var(--tw-bg-opacity));
+            border-bottom: 1px solid rgb(229 231 235 / var(--tw-bg-opacity));
+        }
+        .w-full.flex div{
+            padding: 3px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="w-full">
+        <div class="w-full header-container">
+            <h2>Daily Sale Report</h2>
+        </div>
+        <div class="flex">
+            <div class="flex-child"><h5>Shop Name : TEST</h5></div>
+            <div class="flex-child align-right"><h5>Date : 2023-12-12</h5></div>
+        </div>
+        <div class="w-full">
+            <inject-table items="data_list" class="table">
+                <inject-column prop="item_id" label="Id"/>
+                <inject-column prop="item_name" label="Name" />
+                <inject-column prop="quantity" label="Quantity"/>
+                <inject-column prop="amount" label="Amount"/>
+                <inject-column prop="discount" label="Discount"/>
+                <inject-column prop="netsale" label="Net Sale"/>
+            </inject-table>
+            <div class="w-full flex">
+                <div class="total b">Total</div>
+                <div class="total_quantity b">%%total_quantity%%</div>
+                <div class="total_amount b">%%total_amount%%</div>
+                <div class="total_amount b">%%total_discount%%</div>
+                <div class="total_amount b">%%total_netsale%%</div>
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>

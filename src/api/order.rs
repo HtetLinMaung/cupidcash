@@ -2,7 +2,7 @@ use actix_web::{get, post, put, web, HttpRequest, HttpResponse, Responder};
 use chrono::NaiveDate;
 use serde::Deserialize;
 use serde_json::Value;
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, sync::Arc, fs, io};
 use tokio_postgres::Client;
 
 use crate::{
@@ -441,4 +441,140 @@ pub async fn update_order(
             message: String::from("Order not found!"),
         }),
     }
+}
+
+#[derive(Deserialize)]
+pub struct ReportQuery {
+    pub date: NaiveDate,
+    pub shop_id: i32,
+}
+#[get("/api/daily-sale-report")]
+pub async fn get_daily_sale_report(
+    req: HttpRequest,
+    query: web::Query<ReportQuery>,
+    client: web::Data<Arc<Client>>,
+) -> impl Responder {
+    // Extract the token from the Authorization header
+    let token = match req.headers().get("Authorization") {
+        Some(value) => {
+            let parts: Vec<&str> = value.to_str().unwrap_or("").split_whitespace().collect();
+            if parts.len() == 2 && parts[0] == "Bearer" {
+                parts[1]
+            } else {
+                return HttpResponse::BadRequest().json(BaseResponse {
+                    code: 400,
+                    message: String::from("Invalid Authorization header format"),
+                });
+            }
+        }
+        None => {
+            return HttpResponse::Unauthorized().json(BaseResponse {
+                code: 401,
+                message: String::from("Authorization header missing"),
+            })
+        }
+    };
+
+    let sub = match verify_token_and_get_sub(token) {
+        Some(s) => s,
+        None => {
+            return HttpResponse::Unauthorized().json(BaseResponse {
+                code: 401,
+                message: String::from("Invalid token"),
+            })
+        }
+    };
+
+    // Parse the `sub` value
+    let parsed_values: Vec<&str> = sub.split(',').collect();
+    if parsed_values.len() != 3 {
+        return HttpResponse::InternalServerError().json(BaseResponse {
+            code: 500,
+            message: String::from("Invalid sub format in token"),
+        });
+    }
+
+    // let user_id: i32 = parsed_values[0].parse().unwrap();
+    // let role: &str = parsed_values[1];
+    //let shop_id: i32 = parsed_values[2].parse().unwrap();
+    match order::get_daily_sale_report(
+        query.date,
+        query.shop_id,
+        &client,
+    )
+    .await
+    {
+        Ok(data) => HttpResponse::Ok().json(DataResponse {
+            code: 200,
+            message: String::from("Successful."),
+            data: Some(data),
+        }),
+        Err(err) => {
+            // Log the error message here
+            println!("Error retrieving orders: {:?}", err);
+            HttpResponse::InternalServerError().json(BaseResponse {
+                code: 500,
+                message: String::from("Error trying to read all orders from database"),
+            })
+        }
+    }
+}
+
+#[get("/api/download-daily-sale-report")]
+pub async fn download_daily_sale_report(
+    req: HttpRequest,
+) -> Result<HttpResponse, Box<dyn std::error::Error>> {
+    // Extract the token from the Authorization header
+    let token = match req.headers().get("Authorization") {
+        Some(value) => {
+            let parts: Vec<&str> = value.to_str().unwrap_or("").split_whitespace().collect();
+            if parts.len() == 2 && parts[0] == "Bearer" {
+                parts[1]
+            } else {
+                return Ok(HttpResponse::BadRequest().json(BaseResponse {
+                    code: 400,
+                    message: String::from("Invalid Authorization header format"),
+                }));
+            }
+        }
+        None => {
+            return Ok(HttpResponse::Unauthorized().json(BaseResponse {
+                code: 401,
+                message: String::from("Authorization header missing"),
+            }))
+        }
+    };
+
+    let sub = match verify_token_and_get_sub(token) {
+        Some(s) => s,
+        None => {
+            return Ok(HttpResponse::Unauthorized().json(BaseResponse {
+                code: 401,
+                message: String::from("Invalid token"),
+            }))
+        }
+    };
+
+    // Parse the `sub` value
+    let parsed_values: Vec<&str> = sub.split(',').collect();
+    if parsed_values.len() != 3 {
+        return Ok(HttpResponse::InternalServerError().json(BaseResponse {
+            code: 500,
+            message: String::from("Invalid sub format in token"),
+        }));
+    }
+    // Assuming you have the dynamically determined path to the PDF file
+    let file_path = "reports/dailysalereport.pdf"; // Replace this with your dynamic path logic
+
+    // Read the file content
+    let file_content = fs::read(&file_path).map_err(|e| {
+        println!("Error reading PDF file: {:?}", e);
+        Box::new(io::Error::new(io::ErrorKind::Other, e)) as Box<dyn std::error::Error>
+    })?;
+
+    // Serve the PDF file
+    Ok(HttpResponse::Ok()
+        .append_header(("Content-Disposition", "attachment; filename=dailysalereport.pdf"))
+        .content_type("application/pdf")
+        .body(file_content))
 }

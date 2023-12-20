@@ -4,6 +4,12 @@ use chrono::{NaiveDate, NaiveDateTime};
 // use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use tokio_postgres::{types::ToSql, Client, Error};
+use std::env;
+
+use futures::future::join_all;
+use simple_pdf_generator::{Asset, AssetType, PrintOptions};
+use simple_pdf_generator_derive::PdfTemplate;
+use tokio::task::JoinError;
 
 use crate::utils::{
     common_struct::PaginationResult,
@@ -23,7 +29,10 @@ struct ItemData {
 }
 
 // Function to retrieve item data from the database
-async fn get_item_data(client: &tokio_postgres::Client, item_id: i32) -> Result<ItemData, tokio_postgres::Error> {
+async fn get_item_data(
+    client: &tokio_postgres::Client,
+    item_id: i32,
+) -> Result<ItemData, tokio_postgres::Error> {
     client
         .query_one(
             "SELECT 
@@ -96,7 +105,7 @@ pub async fn create_order(
     for item in order.items {
         // Retrieve item data from the database
         let item_data = get_item_data(&client, item.item_id).await?;
-    
+
         // Insert order item using retrieved data
         insert_order_item(
             &client,
@@ -396,4 +405,129 @@ pub async fn order_exists_in_table(table_id: &i32, client: &Client) -> Result<bo
 
     // Return whether the user exists
     Ok(row.is_ok())
+}
+
+#[derive(Serialize)]
+pub struct DailySaleReportData {
+    item_id: i32,
+    item_name: String,
+    quantity: i32,
+    amount: f64,
+    discount: f64,
+    netsale: f64,
+}
+
+#[derive(PdfTemplate, Serialize)]
+pub struct DailySaleReportSummaryData {
+    total_quantity: i32,
+    total_amount: f64,
+    total_discount: f64,
+    total_netsale: f64,
+    #[PdfTableData]
+    data_list: Vec<DailySaleReportData>
+}
+
+pub async fn get_daily_sale_report(
+    date: NaiveDate,
+    shop_id: i32,
+    client: &tokio_postgres::Client,
+) -> Result<DailySaleReportSummaryData, tokio_postgres::Error> {
+    let query = format!(
+        "select oi.item_id, i.name, sum(oi.quantity)::text as quantity,
+    (sum(oi.original_price*oi.quantity))::text as amount,
+    (sum(oi.original_price*oi.quantity)-sum(oi.price*oi.quantity))::text as discount,
+    (sum(oi.price*oi.quantity))::text as netsale,
+    sum(oi.price*oi.quantity) as netsaleorder
+    from orders o, items i, order_items oi, tables t
+    where o.id = oi.order_id 
+    and i.id = oi.item_id
+    and o.table_id=t.id
+    and DATE_TRUNC('day', o.created_at)='{}'
+    and t.shop_id=$1
+    group by oi.item_id, i.name
+    order by netsaleorder desc",
+        &date
+    );
+    let mut total_amount:f64 = 0.0;
+    let mut total_discount:f64 = 0.0;
+    let mut total_netsale:f64 = 0.0;
+    let mut total_quantity:i32 = 0;
+    let item_rows = client.query(&query, &[&shop_id]).await?;
+    let data_list: Vec<DailySaleReportData> = item_rows
+        .iter()
+        .map(|row| {
+            let amount: &str = row.get("amount");
+            let amount: f64 = amount.parse().unwrap();
+            let discount: &str = row.get("discount");
+            let discount: f64 = discount.parse().unwrap();
+            let netsale: &str = row.get("netsale");
+            let netsale: f64 = netsale.parse().unwrap();
+            let quantity: &str = row.get("quantity");
+            let quantity: i32 = quantity.parse().unwrap();
+            total_amount+=amount;
+            total_discount+=discount;
+            total_netsale+=netsale;
+            total_quantity+=quantity;
+            DailySaleReportData {
+                item_id: row.get("item_id"),
+                item_name: row.get("name"),
+                amount,
+                discount,
+                quantity,
+                netsale,
+            }
+        })
+        .collect();
+    let data:DailySaleReportSummaryData = DailySaleReportSummaryData{
+        total_amount,
+        total_discount,
+        total_netsale,
+        total_quantity,
+        data_list
+    };
+    if let Err(err) = prepare_daily_sale_report_pdf(&data).await {
+        eprintln!("Error: {}", err);
+    }
+    Ok(data)
+}
+
+async fn prepare_daily_sale_report_pdf(data: &DailySaleReportSummaryData) -> Result<(), JoinError> {
+    let html_path = env::current_dir()
+        .unwrap()
+        // .join("test_suite")
+        .join("src/template/daily-sale-report.html");
+
+    let assets = [Asset {
+        path: env::current_dir()
+            .unwrap()
+            //.join("test_suite")
+            .join("src/template/css/style.css"),
+        r#type: AssetType::Style,
+    }];
+
+    let print_options = PrintOptions {
+        paper_width: Some(210.0),
+        paper_height: Some(297.0),
+        margin_top: Some(10.0),
+        margin_bottom: Some(10.0),
+        margin_left: Some(10.0),
+        margin_right: Some(10.0),
+        ..PrintOptions::default()
+    };
+    let gen_0 = data.generate_pdf(html_path.clone(), &assets, &print_options);
+
+    let futures_res = join_all(vec![
+        gen_0
+    ])
+    .await;
+
+    for res in futures_res.iter().enumerate() {
+        let Ok(content) = res.1.as_ref() else {
+            println!("Error on {} {}", res.0, res.1.as_ref().unwrap_err());
+            continue;
+        };
+
+        _ = tokio::fs::write(format!("reports/dailysalereport.pdf"), content).await;
+    }
+    Ok(())
 }

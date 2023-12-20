@@ -1,0 +1,41 @@
+:root{
+    --tw-bg-opacity: 1;
+}
+body, *{
+    font-family: "Nunito", sans-serif !important;
+}
+.w-full{
+    width: 100%;
+}
+.table {
+    width: 100%;
+}
+table, th, td {
+    border: 1px solid rgb(229 231 235 / var(--tw-bg-opacity));
+    border-collapse: collapse;
+    padding: 3px;
+}
+tbody{
+    text-align: right;
+}
+
+thead th{
+    --tw-bg-opacity: 1;
+    background-color: rgb(229 231 235 / var(--tw-bg-opacity));
+    padding: 10px 0;
+}
+.header-container{
+   text-align: center;
+}
+.flex{
+    display: flex;
+}
+.flex-child{
+    flex: 1;
+}
+.align-right{
+    text-align: right;
+}
+.b{
+    font-weight: bold;
+}
