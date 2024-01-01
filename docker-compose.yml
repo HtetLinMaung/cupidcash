@@ -1,7 +1,8 @@
-version: '3.8'
+version: "3.8"
 
 services:
   web:
+    restart: always
     build: .
     ports:
       - "8000:8080"
@@ -34,6 +35,5 @@ services:
   #     POSTGRES_DB: mydatabase
   #   volumes:
   #     - pgdata:/var/lib/postgresql/data
-
 # volumes:
 #   pgdata:
