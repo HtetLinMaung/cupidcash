@@ -2,7 +2,8 @@ use actix_web::{get, post, put, web, HttpRequest, HttpResponse, Responder};
 use chrono::NaiveDate;
 use serde::Deserialize;
 use serde_json::Value;
-use std::{collections::HashMap, sync::Arc, fs, io};
+use std::{collections::HashMap, fs, io, sync::Arc};
+use tokio::sync::Mutex;
 use tokio_postgres::Client;
 
 use crate::{
@@ -17,9 +18,10 @@ use crate::{
 #[post("/api/orders")]
 pub async fn create_order(
     req: HttpRequest,
-    data: web::Json<NewOrder>,
-    client: web::Data<Arc<Client>>,
+    body: web::Json<NewOrder>,
+    data: web::Data<Arc<Mutex<Client>>>,
 ) -> impl Responder {
+    let client = data.lock().await;
     // Extract the token from the Authorization header
     let token = match req.headers().get("Authorization") {
         Some(value) => {
@@ -63,7 +65,7 @@ pub async fn create_order(
     let user_id: i32 = parsed_values[0].parse().unwrap();
     // let role_name: &str = parsed_values[1];
     // let shop_id: i32 = parsed_values[2].parse().unwrap();
-    match order::order_exists_in_table(&data.table_id, &client).await {
+    match order::order_exists_in_table(&body.table_id, &client).await {
         Ok(exists) => {
             if exists {
                 return HttpResponse::BadRequest().json(BaseResponse {
@@ -71,7 +73,7 @@ pub async fn create_order(
                     message: String::from("Order already exists in the request table!"),
                 });
             }
-            match order::create_order(user_id, data.into_inner(), &client).await {
+            match order::create_order(user_id, body.into_inner(), &client).await {
                 Ok(id) => {
                     tokio::spawn(async move {
                         let mut payload: HashMap<String, Value> = HashMap::new();
@@ -121,8 +123,9 @@ pub struct GetOrdersQuery {
 pub async fn get_orders(
     req: HttpRequest,
     query: web::Query<GetOrdersQuery>,
-    client: web::Data<Arc<Client>>,
+    data: web::Data<Arc<Mutex<Client>>>,
 ) -> impl Responder {
+    let client = data.lock().await;
     // Extract the token from the Authorization header
     let token = match req.headers().get("Authorization") {
         Some(value) => {
@@ -205,8 +208,9 @@ pub async fn get_orders(
 pub async fn get_order_detail(
     req: HttpRequest,
     order_id: web::Path<i32>,
-    client: web::Data<Arc<Client>>,
+    data: web::Data<Arc<Mutex<Client>>>,
 ) -> impl Responder {
+    let client = data.lock().await;
     // Extract the token from the Authorization header
     let token = match req.headers().get("Authorization") {
         Some(value) => {
@@ -271,8 +275,9 @@ pub async fn get_order_detail(
 pub async fn get_order_by_id(
     req: HttpRequest,
     path: web::Path<i32>,
-    client: web::Data<Arc<Client>>,
+    data: web::Data<Arc<Mutex<Client>>>,
 ) -> HttpResponse {
+    let client = data.lock().await;
     let order_id = path.into_inner();
     // Extract the token from the Authorization header
     let token = match req.headers().get("Authorization") {
@@ -335,7 +340,7 @@ pub async fn get_order_by_id(
 pub struct UpdateOrderRequest {
     pub status: String,
     pub tax: Option<f64>,
-    pub discount: Option<f64>
+    pub discount: Option<f64>,
 }
 
 #[put("/api/orders/{order_id}")]
@@ -343,8 +348,9 @@ pub async fn update_order(
     req: HttpRequest,
     path: web::Path<i32>,
     body: web::Json<UpdateOrderRequest>,
-    client: web::Data<Arc<Client>>,
+    data: web::Data<Arc<Mutex<Client>>>,
 ) -> HttpResponse {
+    let client = data.lock().await;
     let order_id = path.into_inner();
     // Extract the token from the Authorization header
     let token = match req.headers().get("Authorization") {
@@ -452,8 +458,9 @@ pub struct ReportQuery {
 pub async fn get_daily_sale_report(
     req: HttpRequest,
     query: web::Query<ReportQuery>,
-    client: web::Data<Arc<Client>>,
+    data: web::Data<Arc<Mutex<Client>>>,
 ) -> impl Responder {
+    let client = data.lock().await;
     // Extract the token from the Authorization header
     let token = match req.headers().get("Authorization") {
         Some(value) => {
@@ -497,13 +504,7 @@ pub async fn get_daily_sale_report(
     // let user_id: i32 = parsed_values[0].parse().unwrap();
     // let role: &str = parsed_values[1];
     //let shop_id: i32 = parsed_values[2].parse().unwrap();
-    match order::get_daily_sale_report(
-        query.date,
-        query.shop_id,
-        &client,
-    )
-    .await
-    {
+    match order::get_daily_sale_report(query.date, query.shop_id, &client).await {
         Ok(data) => HttpResponse::Ok().json(DataResponse {
             code: 200,
             message: String::from("Successful."),
@@ -574,7 +575,10 @@ pub async fn download_daily_sale_report(
 
     // Serve the PDF file
     Ok(HttpResponse::Ok()
-        .append_header(("Content-Disposition", "attachment; filename=dailysalereport.pdf"))
+        .append_header((
+            "Content-Disposition",
+            "attachment; filename=dailysalereport.pdf",
+        ))
         .content_type("application/pdf")
         .body(file_content))
 }

@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use actix_web::{delete, get, post, put, web, HttpRequest, HttpResponse, Responder};
 use serde::Deserialize;
+use tokio::sync::Mutex;
 use tokio_postgres::Client;
 
 use crate::{
@@ -25,9 +26,10 @@ pub struct GetCategoriesQuery {
 #[get("/api/discount_types")]
 pub async fn get_discount_types(
     req: HttpRequest,
-    client: web::Data<Arc<Client>>,
+    data: web::Data<Arc<Mutex<Client>>>,
     query: web::Query<GetCategoriesQuery>,
 ) -> impl Responder {
+    let client = data.lock().await;
     // Extract the token from the Authorization header
     let token = match req.headers().get("Authorization") {
         Some(value) => {
@@ -106,8 +108,9 @@ pub async fn get_discount_types(
 pub async fn add_discount_type(
     req: HttpRequest,
     body: web::Json<DiscountTypeRequest>,
-    client: web::Data<Arc<Client>>,
+    data: web::Data<Arc<Mutex<Client>>>,
 ) -> HttpResponse {
+    let client = data.lock().await;
     // Extract the token from the Authorization header
     let token = match req.headers().get("Authorization") {
         Some(value) => {
@@ -184,8 +187,9 @@ pub async fn add_discount_type(
 pub async fn get_discount_type_by_id(
     req: HttpRequest,
     path: web::Path<i32>,
-    client: web::Data<Arc<Client>>,
+    data: web::Data<Arc<Mutex<Client>>>,
 ) -> HttpResponse {
+    let client = data.lock().await;
     let discount_type_id = path.into_inner();
     // Extract the token from the Authorization header
     let token = match req.headers().get("Authorization") {
@@ -254,8 +258,9 @@ pub async fn update_discount_type(
     req: HttpRequest,
     path: web::Path<i32>,
     body: web::Json<DiscountTypeRequest>,
-    client: web::Data<Arc<Client>>,
+    data: web::Data<Arc<Mutex<Client>>>,
 ) -> HttpResponse {
+    let client = data.lock().await;
     let discount_type_id = path.into_inner();
     // Extract the token from the Authorization header
     let token = match req.headers().get("Authorization") {
@@ -313,19 +318,21 @@ pub async fn update_discount_type(
     }
 
     match discount_type::get_discount_type_by_id(discount_type_id, &client).await {
-        Some(_) => match discount_type::update_discount_type(discount_type_id, &body, &client).await {
-            Ok(()) => HttpResponse::Ok().json(BaseResponse {
-                code: 200,
-                message: String::from("DiscountType updated successfully"),
-            }),
-            Err(e) => {
-                eprintln!("DiscountType updating error: {}", e);
-                return HttpResponse::InternalServerError().json(BaseResponse {
-                    code: 500,
-                    message: String::from("Error updating discount_type!"),
-                });
+        Some(_) => {
+            match discount_type::update_discount_type(discount_type_id, &body, &client).await {
+                Ok(()) => HttpResponse::Ok().json(BaseResponse {
+                    code: 200,
+                    message: String::from("DiscountType updated successfully"),
+                }),
+                Err(e) => {
+                    eprintln!("DiscountType updating error: {}", e);
+                    return HttpResponse::InternalServerError().json(BaseResponse {
+                        code: 500,
+                        message: String::from("Error updating discount_type!"),
+                    });
+                }
             }
-        },
+        }
         None => HttpResponse::NotFound().json(BaseResponse {
             code: 404,
             message: String::from("DiscountType not found!"),
@@ -337,8 +344,9 @@ pub async fn update_discount_type(
 pub async fn delete_discount_type(
     req: HttpRequest,
     path: web::Path<i32>,
-    client: web::Data<Arc<Client>>,
+    data: web::Data<Arc<Mutex<Client>>>,
 ) -> HttpResponse {
+    let client = data.lock().await;
     let discount_type_id = path.into_inner();
     // Extract the token from the Authorization header
     let token = match req.headers().get("Authorization") {
@@ -390,42 +398,47 @@ pub async fn delete_discount_type(
     }
 
     match discount_type::get_discount_type_by_id(discount_type_id, &client).await {
-        Some(d) => match item::is_items_exist_for_discount_type(&d.description, &d.shop_id, &client).await {
-            Ok(is_exist) => {
-                if is_exist {
-                    return HttpResponse::BadRequest().json(BaseResponse {
+        Some(d) => {
+            match item::is_items_exist_for_discount_type(&d.description, &d.shop_id, &client).await
+            {
+                Ok(is_exist) => {
+                    if is_exist {
+                        return HttpResponse::BadRequest().json(BaseResponse {
                         code: 400,
                         message: String::from("Please delete the associated items first before deleting the discount_type. Ensure all products related to this discount_type are removed to proceed with discount_type deletion!"),
                     });
-                } else {
-                    match discount_type::delete_discount_type(discount_type_id, &client).await {
-                        Ok(()) => {
-                            return HttpResponse::Ok().json(BaseResponse {
-                                code: 204,
-                                message: String::from("DiscountType deleted successfully"),
-                            });
-                        }
-                        Err(e) => {
-                            eprintln!("DiscountType deleting error: {}", e);
-                            return HttpResponse::InternalServerError().json(BaseResponse {
-                                code: 500,
-                                message: String::from("Error deleting discount_type!"),
-                            });
+                    } else {
+                        match discount_type::delete_discount_type(discount_type_id, &client).await {
+                            Ok(()) => {
+                                return HttpResponse::Ok().json(BaseResponse {
+                                    code: 204,
+                                    message: String::from("DiscountType deleted successfully"),
+                                });
+                            }
+                            Err(e) => {
+                                eprintln!("DiscountType deleting error: {}", e);
+                                return HttpResponse::InternalServerError().json(BaseResponse {
+                                    code: 500,
+                                    message: String::from("Error deleting discount_type!"),
+                                });
+                            }
                         }
                     }
                 }
+                Err(err) => {
+                    println!("{:?}", err);
+                    return HttpResponse::InternalServerError().json(BaseResponse {
+                        code: 400,
+                        message: String::from(
+                            "Something went wrong with checking items existence!",
+                        ),
+                    });
+                }
             }
-            Err(err) => {
-                println!("{:?}", err);
-                return HttpResponse::InternalServerError().json(BaseResponse {
-                    code: 400,
-                    message: String::from("Something went wrong with checking items existence!"),
-                });
-            }
-        },
+        }
         None => HttpResponse::NotFound().json(BaseResponse {
             code: 404,
             message: String::from("DiscountType not found!"),
         }),
-    }    
+    }
 }

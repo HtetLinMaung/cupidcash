@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use actix_web::{get, web, HttpRequest, HttpResponse, Responder};
+use tokio::sync::Mutex;
 use tokio_postgres::Client;
 
 use crate::{
@@ -12,7 +13,8 @@ use crate::{
 };
 
 #[get("/api/roles")]
-pub async fn get_roles(req: HttpRequest, client: web::Data<Arc<Client>>) -> impl Responder {
+pub async fn get_roles(req: HttpRequest, data: web::Data<Arc<Mutex<Client>>>) -> impl Responder {
+    let client = data.lock().await;
     // Extract the token from the Authorization header
     let token = match req.headers().get("Authorization") {
         Some(value) => {
