@@ -21,7 +21,7 @@ pub async fn create_order(
     body: web::Json<NewOrder>,
     data: web::Data<Arc<Mutex<Client>>>,
 ) -> impl Responder {
-    let client = data.lock().await;
+    let mut client = data.lock().await;
     // Extract the token from the Authorization header
     let token = match req.headers().get("Authorization") {
         Some(value) => {
@@ -73,7 +73,7 @@ pub async fn create_order(
                     message: String::from("Order already exists in the request table!"),
                 });
             }
-            match order::create_order(user_id, body.into_inner(), &client).await {
+            match order::create_order(user_id, body.into_inner(), &mut client).await {
                 Ok(id) => {
                     tokio::spawn(async move {
                         let mut payload: HashMap<String, Value> = HashMap::new();

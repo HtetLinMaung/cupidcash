@@ -3,8 +3,8 @@
 use chrono::{NaiveDate, NaiveDateTime};
 // use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
-use tokio_postgres::{types::ToSql, Client, Error};
 use std::env;
+use tokio_postgres::{types::ToSql, Client, Error};
 
 use futures::future::join_all;
 use simple_pdf_generator::{Asset, AssetType, PrintOptions};
@@ -89,7 +89,7 @@ pub struct NewOrderItem {
 pub async fn create_order(
     waiter_id: i32,
     order: NewOrder,
-    client: &Client,
+    client: &mut Client,
 ) -> Result<i32, Box<dyn std::error::Error>> {
     // Here, implement logic to insert the order into the database.
     // This might involve multiple insert statements: one for the order and then multiple for the items in the order.
@@ -424,7 +424,7 @@ pub struct DailySaleReportSummaryData {
     total_discount: f64,
     total_netsale: f64,
     #[PdfTableData]
-    data_list: Vec<DailySaleReportData>
+    data_list: Vec<DailySaleReportData>,
 }
 
 pub async fn get_daily_sale_report(
@@ -448,10 +448,10 @@ pub async fn get_daily_sale_report(
     order by netsaleorder desc",
         &date
     );
-    let mut total_amount:f64 = 0.0;
-    let mut total_discount:f64 = 0.0;
-    let mut total_netsale:f64 = 0.0;
-    let mut total_quantity:i32 = 0;
+    let mut total_amount: f64 = 0.0;
+    let mut total_discount: f64 = 0.0;
+    let mut total_netsale: f64 = 0.0;
+    let mut total_quantity: i32 = 0;
     let item_rows = client.query(&query, &[&shop_id]).await?;
     let data_list: Vec<DailySaleReportData> = item_rows
         .iter()
@@ -464,10 +464,10 @@ pub async fn get_daily_sale_report(
             let netsale: f64 = netsale.parse().unwrap();
             let quantity: &str = row.get("quantity");
             let quantity: i32 = quantity.parse().unwrap();
-            total_amount+=amount;
-            total_discount+=discount;
-            total_netsale+=netsale;
-            total_quantity+=quantity;
+            total_amount += amount;
+            total_discount += discount;
+            total_netsale += netsale;
+            total_quantity += quantity;
             DailySaleReportData {
                 item_id: row.get("item_id"),
                 item_name: row.get("name"),
@@ -478,12 +478,12 @@ pub async fn get_daily_sale_report(
             }
         })
         .collect();
-    let data:DailySaleReportSummaryData = DailySaleReportSummaryData{
+    let data: DailySaleReportSummaryData = DailySaleReportSummaryData {
         total_amount,
         total_discount,
         total_netsale,
         total_quantity,
-        data_list
+        data_list,
     };
     if let Err(err) = prepare_daily_sale_report_pdf(&data).await {
         eprintln!("Error: {}", err);
@@ -516,10 +516,7 @@ async fn prepare_daily_sale_report_pdf(data: &DailySaleReportSummaryData) -> Res
     };
     let gen_0 = data.generate_pdf(html_path.clone(), &assets, &print_options);
 
-    let futures_res = join_all(vec![
-        gen_0
-    ])
-    .await;
+    let futures_res = join_all(vec![gen_0]).await;
 
     for res in futures_res.iter().enumerate() {
         let Ok(content) = res.1.as_ref() else {
