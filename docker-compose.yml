@@ -3,7 +3,8 @@ version: "3.8"
 services:
   web:
     restart: always
-    build: .
+    # build: .
+    image: htetlinmaung/cupidcash
     ports:
       - "8000:8080"
     # depends_on:
