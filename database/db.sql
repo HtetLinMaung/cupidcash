@@ -90,6 +90,7 @@ CREATE TABLE items
     discount_reason TEXT DEFAULT '',
     discounted_price DECIMAL(18, 2) DEFAULT 0.0,
     discount_type VARCHAR(255) DEFAULT 'No Discount',
+    stock_quantity INT DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     deleted_at TIMESTAMP DEFAULT null
 );
@@ -199,8 +200,11 @@ CREATE TABLE discount_types
     deleted_at TIMESTAMP DEFAULT NULL
 );
 
-INSERT INTO discount_types (description, shop_id) 
-VALUES ('No Discount',2),('Discount by Specific Percentage',2),
-('Discount by Specific Amount',2);
+INSERT INTO discount_types
+    (description, shop_id)
+VALUES
+    ('No Discount', 2),
+    ('Discount by Specific Percentage', 2),
+    ('Discount by Specific Amount', 2);
 -- Future tables (like feedback, loyalty programs) can be added based on requirements
 
