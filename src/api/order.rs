@@ -93,10 +93,11 @@ pub async fn create_order(
                         data: Some(id),
                     })
                 }
-                Err(_) => HttpResponse::InternalServerError().json(BaseResponse {
-                    code: 500,
-                    message: String::from("Error creating order"),
+                Err(err) => HttpResponse::InternalServerError().json(BaseResponse {
+                    code: 400,
+                    message: err.to_string(),
                 }),
+              
             }
         }
         Err(e) => {
