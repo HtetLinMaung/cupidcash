@@ -419,6 +419,8 @@ pub struct DailySaleReportData {
 
 #[derive(PdfTemplate, Serialize)]
 pub struct DailySaleReportSummaryData {
+    date_str: String,
+    shop_name: String,
     total_quantity: i32,
     total_amount: f64,
     total_discount: f64,
@@ -428,10 +430,17 @@ pub struct DailySaleReportSummaryData {
 }
 
 pub async fn get_daily_sale_report(
-    date: NaiveDate,
+    from_date: NaiveDate,
+    to_date: NaiveDate,
     shop_id: i32,
+    shop_name: String,
     client: &tokio_postgres::Client,
 ) -> Result<DailySaleReportSummaryData, tokio_postgres::Error> {
+    let date_str = if !from_date.eq(&to_date) {
+        format!("From {} To {}", from_date, to_date)
+    } else {
+        format!("{}", to_date)
+    };
     let query = format!(
         "select oi.item_id, i.name, sum(oi.quantity)::text as quantity,
     (sum(oi.original_price*oi.quantity))::text as amount,
@@ -442,11 +451,12 @@ pub async fn get_daily_sale_report(
     where o.id = oi.order_id 
     and i.id = oi.item_id
     and o.table_id=t.id
-    and DATE_TRUNC('day', o.created_at)='{}'
+    and DATE_TRUNC('day', o.created_at)>='{}'
+    and DATE_TRUNC('day', o.created_at)<='{}'
     and t.shop_id=$1
     group by oi.item_id, i.name
     order by netsaleorder desc",
-        &date
+        &from_date, &to_date
     );
     let mut total_amount:f64 = 0.0;
     let mut total_discount:f64 = 0.0;
@@ -479,6 +489,8 @@ pub async fn get_daily_sale_report(
         })
         .collect();
     let data:DailySaleReportSummaryData = DailySaleReportSummaryData{
+        date_str,
+        shop_name,
         total_amount,
         total_discount,
         total_netsale,

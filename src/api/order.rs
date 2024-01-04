@@ -7,6 +7,7 @@ use tokio_postgres::Client;
 
 use crate::{
     models::order::{self, NewOrder},
+    models::shop::{self},
     utils::{
         common_struct::{BaseResponse, DataResponse, PaginationResponse},
         jwt::verify_token_and_get_sub,
@@ -445,7 +446,8 @@ pub async fn update_order(
 
 #[derive(Deserialize)]
 pub struct ReportQuery {
-    pub date: NaiveDate,
+    pub from_date: NaiveDate,
+    pub to_date: NaiveDate,
     pub shop_id: i32,
 }
 #[get("/api/daily-sale-report")]
@@ -494,29 +496,43 @@ pub async fn get_daily_sale_report(
         });
     }
 
-    // let user_id: i32 = parsed_values[0].parse().unwrap();
-    // let role: &str = parsed_values[1];
-    //let shop_id: i32 = parsed_values[2].parse().unwrap();
-    match order::get_daily_sale_report(
-        query.date,
-        query.shop_id,
-        &client,
-    )
-    .await
-    {
-        Ok(data) => HttpResponse::Ok().json(DataResponse {
-            code: 200,
-            message: String::from("Successful."),
-            data: Some(data),
+    if query.from_date.gt(&query.to_date) {
+        return HttpResponse::BadRequest().json(BaseResponse {
+            code: 400,
+            message: String::from("Invalid Date Range!"),
+        });
+    }
+
+    match shop::get_shop_by_id(query.shop_id, &client).await {
+        Some(s) => {
+            match order::get_daily_sale_report(
+                query.from_date,
+                query.to_date,
+                query.shop_id,
+                s.name,
+                &client,
+            )
+            .await
+            {
+                Ok(data) => HttpResponse::Ok().json(DataResponse {
+                    code: 200,
+                    message: String::from("Successful."),
+                    data: Some(data),
+                }),
+                Err(err) => {
+                    // Log the error message here
+                    println!("Error retrieving orders: {:?}", err);
+                    HttpResponse::InternalServerError().json(BaseResponse {
+                        code: 500,
+                        message: String::from("Error trying to read all orders from database"),
+                    })
+                }
+            }
+        },
+        None => HttpResponse::NotFound().json(BaseResponse {
+            code: 404,
+            message: String::from("Shop not found!"),
         }),
-        Err(err) => {
-            // Log the error message here
-            println!("Error retrieving orders: {:?}", err);
-            HttpResponse::InternalServerError().json(BaseResponse {
-                code: 500,
-                message: String::from("Error trying to read all orders from database"),
-            })
-        }
     }
 }
 
