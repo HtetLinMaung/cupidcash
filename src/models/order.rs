@@ -3,8 +3,8 @@
 use chrono::{NaiveDate, NaiveDateTime};
 // use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
-use tokio_postgres::{types::ToSql, Client, Error};
 use std::env;
+use tokio_postgres::{types::ToSql, Client, Error};
 
 use futures::future::join_all;
 use simple_pdf_generator::{Asset, AssetType, PrintOptions};
@@ -30,7 +30,7 @@ struct ItemData {
 
 // Function to retrieve item data from the database
 async fn get_item_data(
-    client: &tokio_postgres::Client,
+     client: &tokio_postgres::Transaction<'_>,
     item_id: i32,
 ) -> Result<ItemData, tokio_postgres::Error> {
     client
@@ -60,7 +60,7 @@ async fn get_item_data(
 
 // Function to insert order items
 async fn insert_order_item(
-    client: &tokio_postgres::Client,
+    transaction: &tokio_postgres::Transaction<'_>,
     order_id: i32,
     item_id: i32,
     quantity: i32,
@@ -70,7 +70,7 @@ async fn insert_order_item(
 ) -> Result<(), tokio_postgres::Error> {
     let query = format!("INSERT INTO order_items (order_id, item_id, quantity, special_instructions, price, original_price) 
     VALUES ($1, $2, $3, $4, {},{})", &price, &original_price);
-    client
+    transaction
         .execute(
             &query,
             &[&order_id, &item_id, &quantity, &special_instructions],
@@ -89,13 +89,32 @@ pub struct NewOrderItem {
 pub async fn create_order(
     waiter_id: i32,
     order: NewOrder,
-    client: &Client,
+    client: &mut Client,
 ) -> Result<i32, Box<dyn std::error::Error>> {
+    let transaction = client.transaction().await?;
+
     // Here, implement logic to insert the order into the database.
     // This might involve multiple insert statements: one for the order and then multiple for the items in the order.
 
     // Sample (you'd need to adapt this to your schema and logic)
-    let row = client
+    for item in &order.items {
+        let stock_row = transaction
+            .query_one(
+                "SELECT stock_quantity,name FROM items WHERE id = $1 AND deleted_at IS NULL FOR UPDATE",
+                &[&item.item_id],
+            )
+            .await?;
+        let remaining_quantity: i32 = stock_row.get("stock_quantity");
+        if item.quantity > remaining_quantity {
+            let item_name: String = stock_row.get("name");
+            transaction.rollback().await?;
+            return Err(format!("Insufficient stock for item {}: requested {}, remaining {}", item_name, item.quantity, remaining_quantity).into());
+
+        }
+    }
+
+
+    let row = transaction
         .query_one(
             "insert into orders (table_id, waiter_id) values ($1, $2) returning id",
             &[&order.table_id, &waiter_id],
@@ -104,11 +123,18 @@ pub async fn create_order(
     let id: i32 = row.get("id");
     for item in order.items {
         // Retrieve item data from the database
-        let item_data = get_item_data(&client, item.item_id).await?;
+        let item_data = get_item_data(&transaction, item.item_id).await?;
 
         // Insert order item using retrieved data
+        transaction
+        .execute(
+            "UPDATE items SET stock_quantity = stock_quantity - $1 WHERE id = $2 AND deleted_at IS NULL",
+            &[&item.quantity, &item.item_id],
+        )
+        .await?;
+
         insert_order_item(
-            &client,
+            &transaction,
             id,
             item.item_id,
             item.quantity,
@@ -118,6 +144,7 @@ pub async fn create_order(
         )
         .await?;
     }
+    transaction.commit().await?;
     Ok(id)
 }
 
@@ -426,7 +453,7 @@ pub struct DailySaleReportSummaryData {
     total_discount: f64,
     total_netsale: f64,
     #[PdfTableData]
-    data_list: Vec<DailySaleReportData>
+    data_list: Vec<DailySaleReportData>,
 }
 
 pub async fn get_daily_sale_report(
@@ -458,10 +485,10 @@ pub async fn get_daily_sale_report(
     order by netsaleorder desc",
         &from_date, &to_date
     );
-    let mut total_amount:f64 = 0.0;
-    let mut total_discount:f64 = 0.0;
-    let mut total_netsale:f64 = 0.0;
-    let mut total_quantity:i32 = 0;
+    let mut total_amount: f64 = 0.0;
+    let mut total_discount: f64 = 0.0;
+    let mut total_netsale: f64 = 0.0;
+    let mut total_quantity: i32 = 0;
     let item_rows = client.query(&query, &[&shop_id]).await?;
     let data_list: Vec<DailySaleReportData> = item_rows
         .iter()
@@ -474,10 +501,10 @@ pub async fn get_daily_sale_report(
             let netsale: f64 = netsale.parse().unwrap();
             let quantity: &str = row.get("quantity");
             let quantity: i32 = quantity.parse().unwrap();
-            total_amount+=amount;
-            total_discount+=discount;
-            total_netsale+=netsale;
-            total_quantity+=quantity;
+            total_amount += amount;
+            total_discount += discount;
+            total_netsale += netsale;
+            total_quantity += quantity;
             DailySaleReportData {
                 item_id: row.get("item_id"),
                 item_name: row.get("name"),
@@ -495,7 +522,7 @@ pub async fn get_daily_sale_report(
         total_discount,
         total_netsale,
         total_quantity,
-        data_list
+        data_list,
     };
     if let Err(err) = prepare_daily_sale_report_pdf(&data).await {
         eprintln!("Error: {}", err);
@@ -528,10 +555,7 @@ async fn prepare_daily_sale_report_pdf(data: &DailySaleReportSummaryData) -> Res
     };
     let gen_0 = data.generate_pdf(html_path.clone(), &assets, &print_options);
 
-    let futures_res = join_all(vec![
-        gen_0
-    ])
-    .await;
+    let futures_res = join_all(vec![gen_0]).await;
 
     for res in futures_res.iter().enumerate() {
         let Ok(content) = res.1.as_ref() else {

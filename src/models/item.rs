@@ -30,6 +30,7 @@ pub struct Item {
     pub shop_name: String,
     pub created_at: NaiveDateTime,
     pub categories: Vec<ItemCategory>,
+    pub stock_quantity: i32,
 }
 
 pub async fn get_items(
@@ -67,7 +68,7 @@ pub async fn get_items(
             when i.discount_type = 'Discount by Specific Amount' then i.discounted_price::text 
             else case when i.discount_expiration is null then (i.price - (i.price * i.discount_percent / 100))::text 
             when now() >= i.discount_expiration then i.price::text else (i.price - (i.price * i.discount_percent / 100))::text end end as discounted_price, 
-        i.discount_type",
+        i.discount_type, i.stock_quantity",
         base_query: &base_query,
         search_columns: vec!["i.name", "i.description", "i.price::text", "s.name", "i.discount_percent::text", "i.discount_reason", "i.discounted_price::text", "i.discount_type"],
         search: search.as_deref(),
@@ -123,6 +124,7 @@ pub async fn get_items(
             discount_reason: row.get("discount_reason"),
             discounted_price: discounted_price_str.parse().unwrap(), // Assuming the "discounted_price" column is of type f64
             discount_type: row.get("discount_type"),
+            stock_quantity: row.get("stock_quantity"),
         });
     }
 
@@ -148,14 +150,20 @@ pub struct ItemRequest {
     pub discount_reason: String,
     pub discounted_price: f64,
     pub discount_type: String,
+    pub stock_quantity: Option<i32>,
 }
 
 pub async fn add_item(
     data: &ItemRequest,
     client: &Client,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let stock_quantity = if let Some(sq) = data.stock_quantity {
+        sq
+    } else {
+        0
+    };
     let query = format!(
-        "INSERT INTO items (name, description, price, image_url, shop_id, discount_percent, discount_expiration, discount_reason, discounted_price, discount_type) VALUES ($1, $2, {}, $3, $4, {}, $5, $6, {}, $7) RETURNING id",
+        "INSERT INTO items (name, description, price, image_url, shop_id, discount_percent, discount_expiration, discount_reason, discounted_price, discount_type, stock_quantity) VALUES ($1, $2, {}, $3, $4, {}, $5, $6, {}, $7, $8) RETURNING id",
         data.price,data.discount_percent,data.discounted_price,
     );
 
@@ -170,6 +178,7 @@ pub async fn add_item(
                 &data.discount_expiration,
                 &data.discount_reason,
                 &data.discount_type,
+                &stock_quantity,
             ],
         )
         .await?;
@@ -195,7 +204,7 @@ pub async fn get_item_by_id(item_id: i32, client: &Client) -> Option<Item> {
             when i.discount_type = 'Discount by Specific Amount' then i.discounted_price::text 
             else case when i.discount_expiration is null then (i.price - (i.price * i.discount_percent / 100))::text 
             when now() >= i.discount_expiration then i.price::text else (i.price - (i.price * i.discount_percent / 100))::text end end as discounted_price, 
-            i.discount_type FROM items i JOIN shops s ON i.shop_id = s.id WHERE i.deleted_at IS NULL AND i.id = $1",
+            i.discount_type, i.stock_quantity FROM items i JOIN shops s ON i.shop_id = s.id WHERE i.deleted_at IS NULL AND i.id = $1",
             &[&item_id],
         )
         .await;
@@ -241,6 +250,7 @@ pub async fn get_item_by_id(item_id: i32, client: &Client) -> Option<Item> {
                 discount_reason: row.get("discount_reason"),
                 discounted_price: discounted_price_str.parse().unwrap(),
                 discount_type: row.get("discount_type"),
+                stock_quantity: row.get("stock_quantity"),
             })
         }
         Err(_) => None,
@@ -253,7 +263,12 @@ pub async fn update_item(
     data: &ItemRequest,
     client: &Client,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let query = format!("UPDATE items SET name = $1, description = $2, price = {}, image_url = $3, shop_id = $4, discount_percent = {}, discount_expiration = $5, discount_reason = $6, discounted_price = {}, discount_type = $7 WHERE id = $8",
+    let stock_quantity = if let Some(sq) = data.stock_quantity {
+        sq
+    } else {
+        0
+    };
+    let query = format!("UPDATE items SET name = $1, description = $2, price = {}, image_url = $3, shop_id = $4, discount_percent = {}, discount_expiration = $5, discount_reason = $6, discounted_price = {}, discount_type = $7, stock_quantity = $8 WHERE id = $9",
     data.price, data.discount_percent, data.discounted_price);
     client
         .execute(
@@ -266,6 +281,7 @@ pub async fn update_item(
                 &data.discount_expiration,
                 &data.discount_reason,
                 &data.discount_type,
+                &stock_quantity,
                 &item_id,
             ],
         )
@@ -386,7 +402,9 @@ pub async fn is_items_exist_for_discount_type(
 ) -> Result<bool, Box<dyn std::error::Error>> {
     let query =
         format!("select count(*) as total from items where shop_id = $1 and discount_type=$2 and deleted_at is null");
-    let row = client.query_one(&query, &[&shop_id, &discount_type]).await?;
+    let row = client
+        .query_one(&query, &[&shop_id, &discount_type])
+        .await?;
     let total: i64 = row.get("total");
     Ok(total > 0)
 }

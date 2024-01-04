@@ -6,6 +6,7 @@ use actix_cors::Cors;
 use actix_files as fs;
 use actix_web::{web, App, HttpServer};
 use dotenv::dotenv;
+use tokio::sync::Mutex;
 use tokio_postgres::NoTls;
 
 mod api;
@@ -21,7 +22,7 @@ async fn main() -> std::io::Result<()> {
         .expect("Port must be number");
     let conn = env::var("DB_CONNECTION").expect("DB_CONNECTION must be set");
     let (client, connection) = tokio_postgres::connect(conn.as_str(), NoTls).await.unwrap();
-    let client = Arc::new(client);
+    let client = Arc::new(Mutex::new(client));
 
     // The connection object performs the actual communication with the database,
     // so spawn it off to run on its own.

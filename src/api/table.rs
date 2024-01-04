@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use actix_web::{delete, get, post, put, web, HttpRequest, HttpResponse, Responder};
 use serde::Deserialize;
+use tokio::sync::Mutex;
 use tokio_postgres::Client;
 
 use crate::{
@@ -22,9 +23,10 @@ pub struct GetTablesQuery {
 #[get("/api/tables")]
 pub async fn get_tables(
     req: HttpRequest,
-    client: web::Data<Arc<Client>>,
+    data: web::Data<Arc<Mutex<Client>>>,
     query: web::Query<GetTablesQuery>,
 ) -> impl Responder {
+    let client = data.lock().await;
     // Extract the token from the Authorization header
     let token = match req.headers().get("Authorization") {
         Some(value) => {
@@ -103,8 +105,9 @@ pub async fn get_tables(
 pub async fn add_table(
     req: HttpRequest,
     body: web::Json<TableRequest>,
-    client: web::Data<Arc<Client>>,
+    data: web::Data<Arc<Mutex<Client>>>,
 ) -> HttpResponse {
+    let client = data.lock().await;
     // Extract the token from the Authorization header
     let token = match req.headers().get("Authorization") {
         Some(value) => {
@@ -203,8 +206,9 @@ pub async fn add_table(
 pub async fn get_table_by_id(
     req: HttpRequest,
     path: web::Path<i32>,
-    client: web::Data<Arc<Client>>,
+    data: web::Data<Arc<Mutex<Client>>>,
 ) -> HttpResponse {
+    let client = data.lock().await;
     let table_id = path.into_inner();
     // Extract the token from the Authorization header
     let token = match req.headers().get("Authorization") {
@@ -272,8 +276,9 @@ pub async fn update_table(
     req: HttpRequest,
     path: web::Path<i32>,
     body: web::Json<TableRequest>,
-    client: web::Data<Arc<Client>>,
+    data: web::Data<Arc<Mutex<Client>>>,
 ) -> HttpResponse {
+    let client = data.lock().await;
     let table_id = path.into_inner();
     // Extract the token from the Authorization header
     let token = match req.headers().get("Authorization") {
@@ -336,7 +341,6 @@ pub async fn update_table(
     //         message: String::from("QR code must not be empty!"),
     //     });
     // }
-    
 
     match table::get_table_by_id(table_id, &client).await {
         Some(t) => {
@@ -377,16 +381,16 @@ pub async fn update_table(
             code: 404,
             message: String::from("Table not found!"),
         }),
-    }    
-        
+    }
 }
 
 #[delete("/api/tables/{table_id}")]
 pub async fn delete_table(
     req: HttpRequest,
     path: web::Path<i32>,
-    client: web::Data<Arc<Client>>,
+    data: web::Data<Arc<Mutex<Client>>>,
 ) -> HttpResponse {
+    let client = data.lock().await;
     let table_id = path.into_inner();
     // Extract the token from the Authorization header
     let token = match req.headers().get("Authorization") {

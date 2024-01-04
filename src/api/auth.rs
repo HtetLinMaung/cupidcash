@@ -7,6 +7,7 @@ use crate::utils::jwt::{self, verify_token_and_get_sub};
 use actix_web::{post, web, HttpResponse, Responder};
 use bcrypt::{hash, verify, DEFAULT_COST};
 use serde::{Deserialize, Serialize};
+use tokio::sync::Mutex;
 use tokio_postgres::Client;
 
 #[derive(Deserialize)]
@@ -26,9 +27,10 @@ pub struct LoginResponse {
 
 #[post("/api/auth/login")]
 pub async fn login(
-    client: web::Data<Arc<Client>>,
+    data: web::Data<Arc<Mutex<Client>>>,
     credentials: web::Json<LoginRequest>,
 ) -> HttpResponse {
+    let client = data.lock().await;
     // Fetch user from the database based on the username
     let user = get_user(&credentials.username, &client).await;
 

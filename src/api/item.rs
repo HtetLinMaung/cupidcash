@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use actix_web::{delete, get, post, put, web, HttpRequest, HttpResponse, Responder};
 use serde::Deserialize;
+use tokio::sync::Mutex;
 use tokio_postgres::Client;
 
 use crate::{
@@ -23,9 +24,10 @@ pub struct GetItemsQuery {
 #[get("/api/items")]
 pub async fn get_items(
     req: HttpRequest,
-    client: web::Data<Arc<Client>>,
+    data: web::Data<Arc<Mutex<Client>>>,
     query: web::Query<GetItemsQuery>,
 ) -> impl Responder {
+    let client = data.lock().await;
     // Extract the token from the Authorization header
     let token = match req.headers().get("Authorization") {
         Some(value) => {
@@ -104,8 +106,9 @@ pub async fn get_items(
 pub async fn add_item(
     req: HttpRequest,
     body: web::Json<ItemRequest>,
-    client: web::Data<Arc<Client>>,
+    data: web::Data<Arc<Mutex<Client>>>,
 ) -> HttpResponse {
+    let client = data.lock().await;
     // Extract the token from the Authorization header
     let token = match req.headers().get("Authorization") {
         Some(value) => {
@@ -203,7 +206,7 @@ pub async fn add_item(
                 });
             }
         }
-        if body.discount_type!="No Discount" && body.discount_reason.is_empty() {
+        if body.discount_type != "No Discount" && body.discount_reason.is_empty() {
             return HttpResponse::BadRequest().json(BaseResponse {
                 code: 400,
                 message: String::from("Discount reason must not be empty!"),
@@ -230,8 +233,9 @@ pub async fn add_item(
 pub async fn get_item_by_id(
     req: HttpRequest,
     path: web::Path<i32>,
-    client: web::Data<Arc<Client>>,
+    data: web::Data<Arc<Mutex<Client>>>,
 ) -> HttpResponse {
+    let client = data.lock().await;
     let item_id = path.into_inner();
     // Extract the token from the Authorization header
     let token = match req.headers().get("Authorization") {
@@ -293,8 +297,9 @@ pub async fn update_item(
     req: HttpRequest,
     path: web::Path<i32>,
     body: web::Json<ItemRequest>,
-    client: web::Data<Arc<Client>>,
+    data: web::Data<Arc<Mutex<Client>>>,
 ) -> HttpResponse {
+    let client = data.lock().await;
     let item_id = path.into_inner();
     // Extract the token from the Authorization header
     let token = match req.headers().get("Authorization") {
@@ -392,7 +397,7 @@ pub async fn update_item(
                 });
             }
         }
-        if body.discount_type!="No Discount" && body.discount_reason.is_empty() {
+        if body.discount_type != "No Discount" && body.discount_reason.is_empty() {
             return HttpResponse::BadRequest().json(BaseResponse {
                 code: 400,
                 message: String::from("Discount reason must not be empty!"),
@@ -425,8 +430,9 @@ pub async fn update_item(
 pub async fn delete_item(
     req: HttpRequest,
     path: web::Path<i32>,
-    client: web::Data<Arc<Client>>,
+    data: web::Data<Arc<Mutex<Client>>>,
 ) -> HttpResponse {
+    let client = data.lock().await;
     let item_id = path.into_inner();
     // Extract the token from the Authorization header
     let token = match req.headers().get("Authorization") {
