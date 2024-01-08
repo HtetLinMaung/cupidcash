@@ -208,3 +208,13 @@ VALUES
     ('Discount by Specific Amount', 2);
 -- Future tables (like feedback, loyalty programs) can be added based on requirements
 
+-- CREATE TABLE purchases
+-- (
+--     purchase_id SERIAL PRIMARY KEY,
+--     item_id INTEGER REFERENCES items(id),
+--     purchase_price DECIMAL(10, 2) NOT NULL,
+--     quantity INT NOT NULL,
+--     purchase_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+--     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+--     deleted_at TIMESTAMP DEFAULT NULL
+-- );
