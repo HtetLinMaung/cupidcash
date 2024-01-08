@@ -218,3 +218,39 @@ VALUES
 --     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 --     deleted_at TIMESTAMP DEFAULT NULL
 -- );
+
+CREATE TABLE ingredients
+(
+    ingredient_id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    stock_quantity DECIMAL NOT NULL,
+    unit VARCHAR(50) NOT NULL,
+    -- cost_per_unit DECIMAL NOT NULL,
+    -- supplier_id INT REFERENCES suppliers(supplier_id),
+    reorder_level DECIMAL NOT NULL,
+    expiry_date DATE NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP DEFAULT NULL
+);
+
+CREATE TABLE purchases
+(
+    purchase_id SERIAL PRIMARY KEY,
+    -- supplier_id INT REFERENCES suppliers(supplier_id),
+    total_cost DECIMAL NOT NULL,
+    purchase_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP DEFAULT NULL
+);
+
+CREATE TABLE purchase_details
+(
+    purchase_detail_id SERIAL PRIMARY KEY,
+    purchase_id INT REFERENCES purchases(purchase_id),
+    ingredient_id INT REFERENCES ingredients(ingredient_id),
+    quantity_purchased DECIMAL NOT NULL,
+    unit VARCHAR(50) NOT NULL,
+    buying_price_per_unit DECIMAL NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP DEFAULT NULL
+);
