@@ -56,4 +56,6 @@ pub fn init(cfg: &mut web::ServiceConfig) {
     cfg.service(order::get_daily_sale_report);
     cfg.service(order::download_daily_sale_report);
     cfg.service(ingredient_usage::add_ingredient_usages);
+    cfg.service(order::daily_sale_report_pdf);
+    cfg.service(order::daily_sale_report_excel);
 }
