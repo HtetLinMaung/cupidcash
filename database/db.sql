@@ -229,6 +229,7 @@ CREATE TABLE ingredients
     -- supplier_id INT REFERENCES suppliers(supplier_id),
     reorder_level DECIMAL NOT NULL,
     expiry_date DATE NULL,
+    shop_id INTEGER REFERENCES shops(id),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     deleted_at TIMESTAMP DEFAULT NULL
 );
@@ -239,6 +240,7 @@ CREATE TABLE purchases
     -- supplier_id INT REFERENCES suppliers(supplier_id),
     total_cost DECIMAL NOT NULL,
     purchase_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    shop_id INTEGER REFERENCES shops(id),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     deleted_at TIMESTAMP DEFAULT NULL
 );
@@ -251,6 +253,20 @@ CREATE TABLE purchase_details
     quantity_purchased DECIMAL NOT NULL,
     unit VARCHAR(50) NOT NULL,
     buying_price_per_unit DECIMAL NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP DEFAULT NULL
+);
+
+CREATE TABLE ingredient_usages
+(
+    usage_id SERIAL PRIMARY KEY,
+    ingredient_id INT REFERENCES ingredients(ingredient_id),
+    quantity_used DECIMAL NOT NULL,
+    unit VARCHAR(50) NOT NULL,
+    usage_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    associated_activity VARCHAR(255),
+    notes TEXT,
+    shop_id INTEGER REFERENCES shops(id),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     deleted_at TIMESTAMP DEFAULT NULL
 );

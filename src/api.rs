@@ -1,13 +1,14 @@
 mod auth;
 mod category;
+mod discount_type;
 mod image;
+mod ingredient_usage;
 mod item;
 mod order;
 mod role;
 mod shop;
 mod table;
 mod user;
-mod discount_type;
 
 use actix_web::web;
 
@@ -54,4 +55,5 @@ pub fn init(cfg: &mut web::ServiceConfig) {
     cfg.service(discount_type::delete_discount_type);
     cfg.service(order::get_daily_sale_report);
     cfg.service(order::download_daily_sale_report);
+    cfg.service(ingredient_usage::add_ingredient_usages);
 }
