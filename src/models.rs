@@ -1,4 +1,6 @@
 pub mod category;
+pub mod discount_type;
+pub mod ingredient_usage;
 pub mod item;
 pub mod order;
 pub mod role;
@@ -7,4 +9,3 @@ pub mod table;
 pub mod user;
 pub mod discount_type;
 pub mod ingredient;
-

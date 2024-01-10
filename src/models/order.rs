@@ -1,5 +1,4 @@
-// use std::time::SystemTime;
-
+use rust_xlsxwriter::*;
 use chrono::{NaiveDate, NaiveDateTime};
 // use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
@@ -463,6 +462,7 @@ pub async fn get_daily_sale_report(
     to_date: NaiveDate,
     shop_id: i32,
     shop_name: String,
+    user_id: i32,
     client: &tokio_postgres::Client,
 ) -> Result<DailySaleReportSummaryData, tokio_postgres::Error> {
     let date_str = if !from_date.eq(&to_date) {
@@ -526,13 +526,16 @@ pub async fn get_daily_sale_report(
         total_quantity,
         data_list,
     };
-    if let Err(err) = prepare_daily_sale_report_pdf(&data).await {
+    if let Err(err) = prepare_daily_sale_report_pdf(&data, user_id).await {
+        eprintln!("Error: {}", err);
+    }
+    if let Err(err) = prepare_daily_sale_report_excel(&data, user_id).await {
         eprintln!("Error: {}", err);
     }
     Ok(data)
 }
 
-async fn prepare_daily_sale_report_pdf(data: &DailySaleReportSummaryData) -> Result<(), JoinError> {
+async fn prepare_daily_sale_report_pdf(data: &DailySaleReportSummaryData, user_id: i32) -> Result<(), JoinError> {
     let html_path = env::current_dir()
         .unwrap()
         // .join("test_suite")
@@ -565,7 +568,68 @@ async fn prepare_daily_sale_report_pdf(data: &DailySaleReportSummaryData) -> Res
             continue;
         };
 
-        _ = tokio::fs::write(format!("reports/dailysalereport.pdf"), content).await;
+        _ = tokio::fs::write(format!("reports/{}dailysalereport.pdf",user_id), content).await;
     }
     Ok(())
 }
+async fn prepare_daily_sale_report_excel(data: &DailySaleReportSummaryData, user_id: i32) -> Result<(), XlsxError> {
+    // Create a new Excel file object.
+    let mut workbook = Workbook::new();
+
+    // Create some formats to use in the worksheet.
+    let bold_format = Format::new().set_bold().set_align(FormatAlign::Center);
+    let decimal_format = Format::new().set_num_format("0.00").set_align(FormatAlign::Right);
+    let decimal_bold_format = Format::new()
+        .set_num_format("0.00")
+        .set_align(FormatAlign::Right)
+        .set_bold();
+    let merge_center_format = Format::new().set_bold().set_align(FormatAlign::Center);
+    let merge_left_format = Format::new().set_bold().set_align(FormatAlign::Left);
+    let merge_right_format = Format::new().set_bold().set_align(FormatAlign::Right);
+
+    let center_format = Format::new().set_align(FormatAlign::Center);
+    let right_format = Format::new().set_align(FormatAlign::Right);
+    let left_format = Format::new().set_align(FormatAlign::Left);
+    // Add a worksheet to the workbook.
+    let worksheet = workbook.add_worksheet();
+
+    // Set the column width for clarity.
+    worksheet.set_column_width(0, 5)?;
+    worksheet.set_column_width(1, 15)?;
+    worksheet.set_column_width(2, 8)?;
+    worksheet.set_column_width(3, 15)?;
+    worksheet.set_column_width(4, 15)?;
+    worksheet.set_column_width(5, 15)?;
+
+    worksheet.merge_range(0, 0, 0, 5, "Daily Sale Report", &merge_center_format)?;
+    worksheet.merge_range(1, 0, 1, 1, &data.shop_name, &merge_left_format)?;
+    worksheet.merge_range(1, 4, 1, 5, &data.date_str, &merge_right_format)?;
+
+    worksheet.write_with_format(2, 0, "Id", &bold_format)?;
+    worksheet.write_with_format(2, 1, "Item Name", &bold_format)?;
+    worksheet.write_with_format(2, 2, "Quantity", &bold_format)?;
+    worksheet.write_with_format(2, 3, "Amount", &bold_format)?;
+    worksheet.write_with_format(2, 4, "Discount", &bold_format)?;
+    worksheet.write_with_format(2, 5, "Net Sale", &bold_format)?;
+    let mut row_no = 3;
+    for item in &data.data_list {
+        worksheet.write_with_format(row_no, 0, item.item_id, &center_format)?;
+        worksheet.write_with_format(row_no, 1, &item.item_name, &left_format)?;
+        worksheet.write_with_format(row_no, 2, item.quantity, &right_format)?;
+        worksheet.write_with_format(row_no, 3, item.amount, &decimal_format)?;
+        worksheet.write_with_format(row_no, 4, item.discount, &decimal_format)?;
+        worksheet.write_with_format(row_no, 5, item.netsale, &decimal_format)?;
+        row_no += 1;
+    }
+
+    worksheet.merge_range(row_no, 0, row_no, 1, "Total", &merge_center_format)?;
+    worksheet.write_with_format(row_no, 2, data.total_quantity, &bold_format)?;
+    worksheet.write_with_format(row_no, 3, data.total_amount, &decimal_bold_format)?;
+    worksheet.write_with_format(row_no, 4, data.total_discount, &decimal_bold_format)?;
+    worksheet.write_with_format(row_no, 5, data.total_netsale, &decimal_bold_format)?;
+
+    // Save the file to disk.
+    workbook.save(format!("reports/{}dailysalereport.xlsx",user_id))?;
+
+    Ok(())
+} 

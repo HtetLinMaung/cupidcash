@@ -1,6 +1,8 @@
 mod auth;
 mod category;
+mod discount_type;
 mod image;
+mod ingredient_usage;
 mod item;
 mod order;
 mod role;
@@ -61,4 +63,7 @@ pub fn init(cfg: &mut web::ServiceConfig) {
     cfg.service(ingredient::get_ingredient_by_id);
     cfg.service(ingredient::update_ingredient);
     cfg.service(ingredient::delete_ingredient);
+    cfg.service(ingredient_usage::add_ingredient_usages);
+    cfg.service(order::daily_sale_report_pdf);
+    cfg.service(order::daily_sale_report_excel);
 }

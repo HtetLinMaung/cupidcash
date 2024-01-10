@@ -25,3 +25,4 @@ tokio-postgres = { version = "0.7.10", features = ["with-chrono-0_4"] }
 uuid = { version = "1.4.1", features = ["v4"] }
 simple_pdf_generator = "0.3.0"
 simple_pdf_generator_derive = "0.2.1"
+rust_xlsxwriter = "0.60.0"
