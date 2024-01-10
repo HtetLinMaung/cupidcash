@@ -8,6 +8,8 @@ mod shop;
 mod table;
 mod user;
 mod discount_type;
+mod ingredient;
+
 
 use actix_web::web;
 
@@ -54,4 +56,9 @@ pub fn init(cfg: &mut web::ServiceConfig) {
     cfg.service(discount_type::delete_discount_type);
     cfg.service(order::get_daily_sale_report);
     cfg.service(order::download_daily_sale_report);
+    cfg.service(ingredient::get_ingredients);
+    cfg.service(ingredient::add_ingredient);
+    cfg.service(ingredient::get_ingredient_by_id);
+    cfg.service(ingredient::update_ingredient);
+    cfg.service(ingredient::delete_ingredient);
 }

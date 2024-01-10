@@ -97,21 +97,23 @@ pub async fn create_order(
     // This might involve multiple insert statements: one for the order and then multiple for the items in the order.
 
     // Sample (you'd need to adapt this to your schema and logic)
-    for item in &order.items {
-        let stock_row = transaction
-            .query_one(
-                "SELECT stock_quantity,name FROM items WHERE id = $1 AND deleted_at IS NULL FOR UPDATE",
-                &[&item.item_id],
-            )
-            .await?;
-        let remaining_quantity: i32 = stock_row.get("stock_quantity");
-        if item.quantity > remaining_quantity {
-            let item_name: String = stock_row.get("name");
-            transaction.rollback().await?;
-            return Err(format!("Insufficient stock for item {}: requested {}, remaining {}", item_name, item.quantity, remaining_quantity).into());
 
-        }
-    }
+    
+    // for item in &order.items {
+    //     let stock_row = transaction
+    //         .query_one(
+    //             "SELECT stock_quantity,name FROM items WHERE id = $1 AND deleted_at IS NULL FOR UPDATE",
+    //             &[&item.item_id],
+    //         )
+    //         .await?;
+    //     let remaining_quantity: i32 = stock_row.get("stock_quantity");
+    //     if item.quantity > remaining_quantity {
+    //         let item_name: String = stock_row.get("name");
+    //         transaction.rollback().await?;
+    //         return Err(format!("Insufficient stock for item {}: requested {}, remaining {}", item_name, item.quantity, remaining_quantity).into());
+
+    //     }
+    // }
 
 
     let row = transaction
@@ -126,12 +128,12 @@ pub async fn create_order(
         let item_data = get_item_data(&transaction, item.item_id).await?;
 
         // Insert order item using retrieved data
-        transaction
-        .execute(
-            "UPDATE items SET stock_quantity = stock_quantity - $1 WHERE id = $2 AND deleted_at IS NULL",
-            &[&item.quantity, &item.item_id],
-        )
-        .await?;
+        // transaction
+        // .execute(
+        //     "UPDATE items SET stock_quantity = stock_quantity - $1 WHERE id = $2 AND deleted_at IS NULL",
+        //     &[&item.quantity, &item.item_id],
+        // )
+        // .await?;
 
         insert_order_item(
             &transaction,
