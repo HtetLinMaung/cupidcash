@@ -9,7 +9,6 @@ mod role;
 mod shop;
 mod table;
 mod user;
-mod discount_type;
 mod ingredient;
 
 
