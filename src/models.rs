@@ -8,3 +8,4 @@ pub mod shop;
 pub mod table;
 pub mod user;
 pub mod ingredient;
+pub mod purchase;

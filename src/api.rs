@@ -10,6 +10,7 @@ mod shop;
 mod table;
 mod user;
 mod ingredient;
+mod purchashe;
 
 
 use actix_web::web;
@@ -56,12 +57,17 @@ pub fn init(cfg: &mut web::ServiceConfig) {
     cfg.service(discount_type::update_discount_type);
     cfg.service(discount_type::delete_discount_type);
     cfg.service(order::get_daily_sale_report);
-    cfg.service(order::download_daily_sale_report);
+    // cfg.service(order::download_daily_sale_report);
     cfg.service(ingredient::get_ingredients);
     cfg.service(ingredient::add_ingredient);
     cfg.service(ingredient::get_ingredient_by_id);
     cfg.service(ingredient::update_ingredient);
     cfg.service(ingredient::delete_ingredient);
+    cfg.service(purchashe::get_purchases);
+    cfg.service(purchashe::add_purchase);
+    cfg.service(purchashe::get_purchase_by_id);
+    cfg.service(purchashe::update_purchase);
+    cfg.service(purchashe::delete_purchase);
     cfg.service(ingredient_usage::add_ingredient_usages);
     cfg.service(order::daily_sale_report_pdf);
     cfg.service(order::daily_sale_report_excel);
