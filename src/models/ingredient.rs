@@ -33,7 +33,7 @@ pub async fn get_ingredients(
     let result = generate_pagination_query(PaginationOptions {
         select_columns: "ingredient_id, name, stock_quantity::text as stock_quantity, unit, reorder_level::text as reorder_level, expiry_date::text as expiry_date, created_at",
         base_query: &base_query,
-        search_columns: vec!["ingredient_id::varchar", "name", "reorder_level"],
+        search_columns: vec!["ingredient_id::varchar", "name", "reorder_level::varchar"],
         search: search.as_deref(),
         order_options: Some(&order_options),
         page,

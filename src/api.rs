@@ -71,4 +71,8 @@ pub fn init(cfg: &mut web::ServiceConfig) {
     cfg.service(ingredient_usage::add_ingredient_usages);
     cfg.service(order::daily_sale_report_pdf);
     cfg.service(order::daily_sale_report_excel);
+    cfg.service(ingredient_usage::get_ingredient_usages);
+    cfg.service(ingredient_usage::get_ingredient_usage_by_id);
+    cfg.service(ingredient_usage::update_ingredient_usage);
+    cfg.service(ingredient_usage::delete_ingredient_usage);
 }
