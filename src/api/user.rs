@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use actix_web::{delete, get, post, put, web, HttpRequest, HttpResponse, Responder};
 use serde::Deserialize;
+use tokio::sync::Mutex;
 use tokio_postgres::Client;
 
 use crate::{
@@ -24,8 +25,9 @@ pub struct GetUsersQuery {
 pub async fn get_users(
     req: HttpRequest,
     query: web::Query<GetUsersQuery>,
-    client: web::Data<Arc<Client>>,
+    data: web::Data<Arc<Mutex<Client>>>,
 ) -> impl Responder {
+    let client = data.lock().await;
     // Extract the token from the Authorization header
     let token = match req.headers().get("Authorization") {
         Some(value) => {
@@ -108,8 +110,9 @@ pub async fn get_users(
 pub async fn add_user(
     req: HttpRequest,
     body: web::Json<AddUserRequest>,
-    client: web::Data<Arc<Client>>,
+    data: web::Data<Arc<Mutex<Client>>>,
 ) -> HttpResponse {
+    let client = data.lock().await;
     // Extract the token from the Authorization header
     let token = match req.headers().get("Authorization") {
         Some(value) => {
@@ -203,8 +206,9 @@ pub async fn add_user(
 pub async fn get_user_by_id(
     req: HttpRequest,
     path: web::Path<i32>,
-    client: web::Data<Arc<Client>>,
+    data: web::Data<Arc<Mutex<Client>>>,
 ) -> HttpResponse {
+    let client = data.lock().await;
     let user_id = path.into_inner();
     // Extract the token from the Authorization header
     let token = match req.headers().get("Authorization") {
@@ -273,8 +277,9 @@ pub async fn update_user(
     req: HttpRequest,
     path: web::Path<i32>,
     body: web::Json<UpdateUserRequest>,
-    client: web::Data<Arc<Client>>,
+    data: web::Data<Arc<Mutex<Client>>>,
 ) -> HttpResponse {
+    let client = data.lock().await;
     let user_id = path.into_inner();
     // Extract the token from the Authorization header
     let token = match req.headers().get("Authorization") {
@@ -357,8 +362,9 @@ pub async fn update_user(
 pub async fn delete_user(
     req: HttpRequest,
     path: web::Path<i32>,
-    client: web::Data<Arc<Client>>,
+    data: web::Data<Arc<Mutex<Client>>>,
 ) -> HttpResponse {
+    let client = data.lock().await;
     let user_id = path.into_inner();
     // Extract the token from the Authorization header
     let token = match req.headers().get("Authorization") {

@@ -6,7 +6,7 @@ use tokio::sync::Mutex;
 use tokio_postgres::Client;
 
 use crate::{
-    models::item::{self, ItemRequest},
+    models::ingredient_usage::{self, IngredientUsagesRequest},
     utils::{
         common_struct::{BaseResponse, DataResponse, PaginationResponse},
         jwt::verify_token_and_get_sub,
@@ -14,18 +14,17 @@ use crate::{
 };
 
 #[derive(Deserialize)]
-pub struct GetItemsQuery {
+pub struct GetIngredientUsagesQuery {
     pub search: Option<String>,
-    pub category_id: Option<i32>,
     pub page: Option<usize>,
     pub per_page: Option<usize>,
 }
 
-#[get("/api/items")]
-pub async fn get_items(
+#[get("/api/ingredient-usages")]
+pub async fn get_ingredient_usages(
     req: HttpRequest,
     data: web::Data<Arc<Mutex<Client>>>,
-    query: web::Query<GetItemsQuery>,
+    query: web::Query<GetIngredientUsagesQuery>,
 ) -> impl Responder {
     let client = data.lock().await;
     // Extract the token from the Authorization header
@@ -68,16 +67,10 @@ pub async fn get_items(
         });
     }
 
-    // let user_id: &str = parsed_values[0];
-    let role: &str = parsed_values[1];
-    let shop_id: i32 = parsed_values[2].parse().unwrap();
-    match item::get_items(
+    match ingredient_usage::get_ingredient_usages(
         &query.search,
         query.page,
         query.per_page,
-        shop_id,
-        query.category_id,
-        role,
         &client,
     )
     .await
@@ -93,22 +86,132 @@ pub async fn get_items(
         }),
         Err(err) => {
             // Log the error message here
-            println!("Error retrieving items: {:?}", err);
+            println!("Error retrieving ingredient_usages: {:?}", err);
             HttpResponse::InternalServerError().json(BaseResponse {
                 code: 500,
-                message: String::from("Error trying to read all items from database"),
+                message: String::from("Error trying to read all ingredient_usages from database"),
             })
         }
     }
 }
 
-#[post("/api/items")]
-pub async fn add_item(
+#[post("/api/ingredient-usages")]
+pub async fn add_ingredient_usages(
     req: HttpRequest,
-    body: web::Json<ItemRequest>,
+    body: web::Json<IngredientUsagesRequest>,
+    data: web::Data<Arc<Mutex<Client>>>,
+) -> impl Responder {
+    let mut client = data.lock().await;
+
+    let token = match req.headers().get("Authorization") {
+        Some(value) => {
+            let parts: Vec<&str> = value.to_str().unwrap_or("").split_whitespace().collect();
+            if parts.len() == 2 && parts[0] == "Bearer" {
+                parts[1]
+            } else {
+                return HttpResponse::BadRequest().json(BaseResponse {
+                    code: 400,
+                    message: String::from("Invalid Authorization header format"),
+                });
+            }
+        }
+        None => {
+            return HttpResponse::Unauthorized().json(BaseResponse {
+                code: 401,
+                message: String::from("Authorization header missing"),
+            })
+        }
+    };
+
+    let sub = match verify_token_and_get_sub(token) {
+        Some(s) => s,
+        None => {
+            return HttpResponse::Unauthorized().json(BaseResponse {
+                code: 401,
+                message: String::from("Invalid token"),
+            })
+        }
+    };
+
+    // Parse the `sub` value
+    let parsed_values: Vec<&str> = sub.split(',').collect();
+    if parsed_values.len() != 3 {
+        return HttpResponse::InternalServerError().json(BaseResponse {
+            code: 500,
+            message: String::from("Invalid sub format in token"),
+        });
+    }
+
+    // let user_id: &str = parsed_values[0];
+    let role: &str = parsed_values[1];
+    // let shop_id: i32 = parsed_values[2].parse().unwrap();
+
+    if role == "Waiter" {
+        return HttpResponse::Unauthorized().json(BaseResponse {
+            code: 400,
+            message: String::from("Unauthorized!"),
+        });
+    }
+
+    if body.shop_id.is_none() {
+        return HttpResponse::BadRequest().json(BaseResponse {
+            code: 400,
+            message: String::from("Shop Id must not be empty!"),
+        });
+    }
+
+    for ingredient_usage in &body.ingredient_usages {
+        if ingredient_usage.ingredient_id.is_none() || ingredient_usage.ingredient_id.unwrap() == 0
+        {
+            return HttpResponse::BadRequest().json(BaseResponse {
+                code: 400,
+                message: String::from("Ingredient ID must not be empty!"),
+            });
+        }
+
+        if ingredient_usage.quantity_used.is_none()
+            || ingredient_usage.quantity_used.unwrap() <= 0.0
+        {
+            return HttpResponse::BadRequest().json(BaseResponse {
+                code: 400,
+                message: String::from(
+                    "Quantity Used must not be empty or less than or equal to 0.0!",
+                ),
+            });
+        }
+    }
+
+    match ingredient_usage::add_ingredient_usages(&body, &mut client).await {
+        Ok(is_sufficient) => {
+            if !is_sufficient {
+                return HttpResponse::BadRequest().json(BaseResponse {
+                    code: 400,
+                    message: String::from("Insufficient ingredients!"),
+                });
+            }
+            HttpResponse::Ok().json(BaseResponse {
+                code: 200,
+                message: String::from("Ingredient usages added successfully."),
+            })
+        }
+        Err(err) => {
+            println!("{:?}", err);
+            HttpResponse::InternalServerError().json(BaseResponse {
+                code: 500,
+                message: String::from("Error adding ingredient usages to database!"),
+            })
+        }
+    }
+}
+
+#[get("/api/ingredient-usages/{ingredient_usage_id}")]
+pub async fn get_ingredient_usage_by_id(
+    req: HttpRequest,
+    path: web::Path<i32>,
     data: web::Data<Arc<Mutex<Client>>>,
 ) -> HttpResponse {
     let client = data.lock().await;
+    let ingredient_usage_id = path.into_inner();
     // Extract the token from the Authorization header
     let token = match req.headers().get("Authorization") {
         Some(value) => {
@@ -149,158 +252,35 @@ pub async fn add_item(
         });
     }
 
-    // let user_id = parsed_values[0].parse().unwrap();
     let role: &str = parsed_values[1];
 
-    if role == "Waiter" {
+    if role != "Admin" && role != "Manager" {
         return HttpResponse::Unauthorized().json(BaseResponse {
             code: 401,
             message: String::from("Unauthorized!"),
         });
     }
 
-    if body.name.is_empty() {
-        return HttpResponse::BadRequest().json(BaseResponse {
-            code: 400,
-            message: String::from("Name must not be empty!"),
-        });
-    }
-    if body.description.is_empty() {
-        return HttpResponse::BadRequest().json(BaseResponse {
-            code: 400,
-            message: String::from("Description must not be empty!"),
-        });
-    }
-
-    if body.price.is_sign_negative() {
-        return HttpResponse::BadRequest().json(BaseResponse {
-            code: 400,
-            message: String::from("Price must not be negative!"),
-        });
-    }
-
-    if body.discount_type.is_empty() {
-        return HttpResponse::BadRequest().json(BaseResponse {
-            code: 400,
-            message: String::from("Discount type must not be empty!"),
-        });
-    } else {
-        if body.discount_type == "Discount by Specific Percentage" {
-            if body.discount_percent.is_sign_negative() {
-                return HttpResponse::BadRequest().json(BaseResponse {
-                    code: 400,
-                    message: String::from("Discount percent must not be negative!"),
-                });
-            }
-            if body.discount_expiration.is_none() {
-                return HttpResponse::BadRequest().json(BaseResponse {
-                    code: 400,
-                    message: String::from("Discount expire data must not be empty!"),
-                });
-            }
-        } else if body.discount_type == "Discount by Specific Amount" {
-            if body.discounted_price.is_sign_negative() {
-                return HttpResponse::BadRequest().json(BaseResponse {
-                    code: 400,
-                    message: String::from("Discounted price must not be negative!"),
-                });
-            }
-        }
-        if body.discount_type != "No Discount" && body.discount_reason.is_empty() {
-            return HttpResponse::BadRequest().json(BaseResponse {
-                code: 400,
-                message: String::from("Discount reason must not be empty!"),
-            });
-        }
-    }
-
-    match item::add_item(&body, &client).await {
-        Ok(()) => HttpResponse::Created().json(BaseResponse {
-            code: 201,
-            message: String::from("Item added successfully"),
-        }),
-        Err(e) => {
-            eprintln!("Item adding error: {}", e);
-            return HttpResponse::InternalServerError().json(BaseResponse {
-                code: 500,
-                message: String::from("Error adding item!"),
-            });
-        }
-    }
-}
-
-#[get("/api/items/{item_id}")]
-pub async fn get_item_by_id(
-    req: HttpRequest,
-    path: web::Path<i32>,
-    data: web::Data<Arc<Mutex<Client>>>,
-) -> HttpResponse {
-    let client = data.lock().await;
-    let item_id = path.into_inner();
-    // Extract the token from the Authorization header
-    let token = match req.headers().get("Authorization") {
-        Some(value) => {
-            let parts: Vec<&str> = value.to_str().unwrap_or("").split_whitespace().collect();
-            if parts.len() == 2 && parts[0] == "Bearer" {
-                parts[1]
-            } else {
-                return HttpResponse::BadRequest().json(BaseResponse {
-                    code: 400,
-                    message: String::from("Invalid Authorization header format"),
-                });
-            }
-        }
-        None => {
-            return HttpResponse::Unauthorized().json(BaseResponse {
-                code: 401,
-                message: String::from("Authorization header missing"),
-            })
-        }
-    };
-
-    let sub = match verify_token_and_get_sub(token) {
-        Some(s) => s,
-        None => {
-            return HttpResponse::Unauthorized().json(BaseResponse {
-                code: 401,
-                message: String::from("Invalid token"),
-            })
-        }
-    };
-
-    // Parse the `sub` value
-    let parsed_values: Vec<&str> = sub.split(',').collect();
-    if parsed_values.len() != 3 {
-        return HttpResponse::InternalServerError().json(BaseResponse {
-            code: 500,
-            message: String::from("Invalid sub format in token"),
-        });
-    }
-
-    // let role: &str = parsed_values[1];
-
-    match item::get_item_by_id(item_id, &client).await {
+    match ingredient_usage::get_ingredient_usage_by_id(ingredient_usage_id, &client).await {
         Some(c) => HttpResponse::Ok().json(DataResponse {
             code: 200,
-            message: String::from("Item fetched successfully."),
+            message: String::from("IngredientUsages fetched successfully."),
             data: Some(c),
         }),
         None => HttpResponse::NotFound().json(BaseResponse {
             code: 404,
-            message: String::from("Item not found!"),
+            message: String::from("IngredientUsages not found!"),
         }),
     }
 }
 
-#[put("/api/items/{item_id}")]
-pub async fn update_item(
+#[put("/api/ingredient-usages")]
+pub async fn update_ingredient_usage(
     req: HttpRequest,
-    path: web::Path<i32>,
-    body: web::Json<ItemRequest>,
+    body: web::Json<IngredientUsagesRequest>,
     data: web::Data<Arc<Mutex<Client>>>,
 ) -> HttpResponse {
-    let client = data.lock().await;
-    let item_id = path.into_inner();
+    let mut client = data.lock().await;
     // Extract the token from the Authorization header
     let token = match req.headers().get("Authorization") {
         Some(value) => {
@@ -345,95 +325,87 @@ pub async fn update_item(
 
     if role == "Waiter" {
         return HttpResponse::Unauthorized().json(BaseResponse {
-            code: 401,
+            code: 400,
             message: String::from("Unauthorized!"),
         });
     }
 
-    if body.name.is_empty() {
-        return HttpResponse::BadRequest().json(BaseResponse {
-            code: 400,
-            message: String::from("Name must not be empty!"),
-        });
-    }
-    if body.description.is_empty() {
-        return HttpResponse::BadRequest().json(BaseResponse {
-            code: 400,
-            message: String::from("Description must not be empty!"),
-        });
-    }
-
-    if body.price.is_sign_negative() {
-        return HttpResponse::BadRequest().json(BaseResponse {
-            code: 400,
-            message: String::from("Price must not be negative!"),
-        });
-    }
-
-    if body.discount_type.is_empty() {
-        return HttpResponse::BadRequest().json(BaseResponse {
-            code: 400,
-            message: String::from("Discount type must not be empty!"),
-        });
-    } else {
-        if body.discount_type == "Discount by Specific Percentage" {
-            if body.discount_percent.is_sign_negative() {
-                return HttpResponse::BadRequest().json(BaseResponse {
-                    code: 400,
-                    message: String::from("Discount percent must not be negative!"),
-                });
+    for ingredient_usage in &body.ingredient_usages {
+        if ingredient_usage.usage_id.is_none() || ingredient_usage.usage_id.unwrap() == 0
+        {
+            return HttpResponse::BadRequest().json(BaseResponse {
+                code: 400,
+                message: String::from("Usage ID must not be empty!"),
+            });
+        }
+        match ingredient_usage::get_ingredient_usage_by_id(ingredient_usage.usage_id.unwrap(), &client).await
+        {
+            Some(iur_db) => {
+                if iur_db.ingredient_id != ingredient_usage.ingredient_id.unwrap() {
+                    return HttpResponse::BadRequest().json(BaseResponse {
+                        code: 400,
+                        message: String::from("Ingredient ID must not be changed!"),
+                    });
+                }
             }
-            if body.discount_expiration.is_none() {
-                return HttpResponse::BadRequest().json(BaseResponse {
-                    code: 400,
-                    message: String::from("Discount expire data must not be empty!"),
-                });
-            }
-        } else if body.discount_type == "Discount by Specific Amount" {
-            if body.discounted_price.is_sign_negative() {
-                return HttpResponse::BadRequest().json(BaseResponse {
-                    code: 400,
-                    message: String::from("Discounted price must not be negative!"),
+            None => {
+                return HttpResponse::NotFound().json(BaseResponse {
+                    code: 404,
+                    message: String::from("IngredientUsages not found!"),
                 });
             }
         }
-        if body.discount_type != "No Discount" && body.discount_reason.is_empty() {
+        if ingredient_usage.ingredient_id.is_none() || ingredient_usage.ingredient_id.unwrap() == 0
+        {
             return HttpResponse::BadRequest().json(BaseResponse {
                 code: 400,
-                message: String::from("Discount reason must not be empty!"),
+                message: String::from("Ingredient ID must not be empty!"),
+            });
+        }
+
+        if ingredient_usage.quantity_used.is_none()
+            || ingredient_usage.quantity_used.unwrap() <= 0.0
+        {
+            return HttpResponse::BadRequest().json(BaseResponse {
+                code: 400,
+                message: String::from(
+                    "Quantity Used must not be empty or less than or equal to 0.0!",
+                ),
             });
         }
     }
 
-    match item::get_item_by_id(item_id, &client).await {
-        Some(i) => match item::update_item(item_id, &i.image_url, &body, &client).await {
-            Ok(()) => HttpResponse::Ok().json(BaseResponse {
-                code: 200,
-                message: String::from("Item updated successfully"),
-            }),
-            Err(e) => {
-                eprintln!("Item updating error: {}", e);
-                return HttpResponse::InternalServerError().json(BaseResponse {
-                    code: 500,
-                    message: String::from("Error updating item!"),
+    match ingredient_usage::update_ingredient_usage(&body, &mut client).await {
+        Ok(is_sufficient) => {
+            if !is_sufficient {
+                return HttpResponse::BadRequest().json(BaseResponse {
+                    code: 400,
+                    message: String::from("Insufficient ingredients!"),
                 });
             }
-        },
-        None => HttpResponse::NotFound().json(BaseResponse {
-            code: 404,
-            message: String::from("Item not found!"),
-        }),
+            HttpResponse::Ok().json(BaseResponse {
+                code: 200,
+                message: String::from("Ingredient usages updated successfully."),
+            })
+        }
+        Err(err) => {
+            println!("{:?}", err);
+            HttpResponse::InternalServerError().json(BaseResponse {
+                code: 500,
+                message: String::from("Error updating ingredient usages to database!"),
+            })
+        }
     }
 }
 
-#[delete("/api/items/{item_id}")]
-pub async fn delete_item(
+#[delete("/api/ingredient-usages/{ingredient_usage_id}")]
+pub async fn delete_ingredient_usage(
     req: HttpRequest,
     path: web::Path<i32>,
     data: web::Data<Arc<Mutex<Client>>>,
 ) -> HttpResponse {
     let client = data.lock().await;
-    let item_id = path.into_inner();
+    let ingredient_usage_id = path.into_inner();
     // Extract the token from the Authorization header
     let token = match req.headers().get("Authorization") {
         Some(value) => {
@@ -476,30 +448,37 @@ pub async fn delete_item(
 
     let role: &str = parsed_values[1];
 
-    if role == "Waiter" {
+    if role != "Admin" && role != "Manager" {
         return HttpResponse::Unauthorized().json(BaseResponse {
             code: 401,
             message: String::from("Unauthorized!"),
         });
     }
 
-    match item::get_item_by_id(item_id, &client).await {
-        Some(i) => match item::delete_item(item_id, &i.image_url, &client).await {
+    match ingredient_usage::get_ingredient_usage_by_id(ingredient_usage_id, &client).await {
+        Some(iur_db) => match ingredient_usage::delete_ingredient_usage(
+            ingredient_usage_id,
+            iur_db.ingredient_id,
+            iur_db.quantity_used,
+            &client,
+        )
+        .await
+        {
             Ok(()) => HttpResponse::Ok().json(BaseResponse {
                 code: 204,
-                message: String::from("Item deleted successfully"),
+                message: String::from("IngredientUsages deleted successfully"),
             }),
             Err(e) => {
-                eprintln!("Item deleting error: {}", e);
+                eprintln!("IngredientUsages deleting error: {}", e);
                 return HttpResponse::InternalServerError().json(BaseResponse {
                     code: 500,
-                    message: String::from("Error deleting item!"),
+                    message: String::from("Error deleting ingredient_usage!"),
                 });
             }
         },
         None => HttpResponse::NotFound().json(BaseResponse {
             code: 404,
-            message: String::from("Item not found!"),
+            message: String::from("IngredientUsages not found!"),
         }),
     }
 }

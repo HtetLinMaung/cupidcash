@@ -1,8 +1,10 @@
-version: '3.8'
+version: "3.8"
 
 services:
   web:
-    build: .
+    restart: always
+    # build: .
+    image: htetlinmaung/cupidcash
     ports:
       - "8000:8080"
     # depends_on:
@@ -34,6 +36,5 @@ services:
   #     POSTGRES_DB: mydatabase
   #   volumes:
   #     - pgdata:/var/lib/postgresql/data
-
 # volumes:
 #   pgdata:
