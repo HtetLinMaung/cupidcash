@@ -23,6 +23,7 @@ pub struct Purchase {
     pub total_cost: f64,
     pub purchase_date: NaiveDateTime,
     pub shop_id: i32,
+    pub shop_name: String,
     pub created_at: NaiveDateTime,
     pub purchase_details: Vec<PurchaseDetail>,
 
@@ -35,15 +36,15 @@ pub async fn get_purchases(
     client: &Client,
 ) -> Result<PaginationResult<Purchase>, Error> {
     let base_query =
-        "from purchases where deleted_at is null".to_string();
+        "from purchases p  join shops s on s.id = p.shop_id  where p.deleted_at is null".to_string();
     let params: Vec<Box<dyn ToSql + Sync>> = vec![];
 
     let order_options = "created_at desc";
 
     let result = generate_pagination_query(PaginationOptions {
-        select_columns: "purchase_id,total_cost::text as total_cost, shop_id, purchase_date, created_at",
+        select_columns: "p.purchase_id,p.total_cost::text as total_cost, p.shop_id,s.name shop_name, p.purchase_date, p.created_at",
         base_query: &base_query,
-        search_columns: vec!["purchase_id::varchar", "shop_id::varcahar"],
+        search_columns: vec!["p.purchase_id::varchar", "s.name"],
         search: search.as_deref(),
         order_options: Some(&order_options),
         page,
@@ -86,6 +87,7 @@ pub async fn get_purchases(
                     total_cost: total_cost_str.parse().unwrap(),
                     purchase_date: row.get("purchase_date"),
                     shop_id: row.get("shop_id"),
+                    shop_name: row.get("shop_name"),
                     created_at: row.get("created_at"),
                     purchase_details: purchase_detail_rows
                         .iter()
@@ -178,7 +180,7 @@ pub async fn add_purchase(
 }
 
 pub async fn get_purchase_by_id(purchase_id: i32, client: &Client) -> Option<Purchase> {
-    let result = client.query_one("select purchase_id,total_cost::text as total_cost, purchase_date, shop_id, created_at from purchases  where deleted_at is null  and purchase_id = $1 and deleted_at is null", &[&purchase_id]).await;
+    let result = client.query_one("select p.purchase_id,p.total_cost::text as total_cost, p.purchase_date, p.shop_id, p.created_at,s.name as shop_name from purchases p join shops s on s.id = p.shop_id  where p.deleted_at is null  and purchase_id = $1 and s.deleted_at is null", &[&purchase_id]).await;
     let purchase_details_rows = match client
         .query(
             "select pd.purchase_detail_id,pd.purchase_id,i.name as ingredient_name, pd.ingredient_id,pd.quantity_purchased::text as quantity_purchased,pd.unit,pd.buying_price_per_unit::text as buying_price_per_unit
@@ -205,6 +207,7 @@ pub async fn get_purchase_by_id(purchase_id: i32, client: &Client) -> Option<Pur
                 total_cost: total_cost_str.parse().unwrap(),
                 purchase_date: row.get("purchase_date"),
                 shop_id: row.get("shop_id"),
+                shop_name: row.get("shop_name"),
                 created_at: row.get("created_at"),
                 purchase_details: purchase_details_rows
                         .iter()
@@ -238,9 +241,8 @@ pub async fn update_purchase(
     client: &mut Client,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let transaction = client.transaction().await?;
-    let query = format!("update purchases set total_cost = {}, purchase_date = $1, shop_id = $2 where purchase_id = $3 and deleted_at = null",data.total_cost);
-    transaction
-        .execute(
+    let query = format!("update purchases set total_cost = {}, purchase_date = $1, shop_id = $2 where purchase_id = $3 and deleted_at is null",data.total_cost);
+    transaction.execute(
             &query,
             &[
                 &data.purchase_date,
@@ -251,14 +253,17 @@ pub async fn update_purchase(
         .await?;
     // client.execute("delete from purchase_details where purchase_id = $1",&[&purchase_id],).await?;
 
-    for data in &data.purchase_details {
-        let purchase_details_update_query = format!("update purchase_details set ingredient_id = $1, quantity_purchased= {}, buying_price_per_unit = {} where purchase_detail_id = $2  and deleted_at = null",data.quantity_purchased, data.buying_price_per_unit);
-        transaction
-            .execute(&purchase_details_update_query, &[&data.ingredient_id, &data.purchase_detail_id])
+    for purchase_detail  in &data.purchase_details {
+        let purchase_details_update_query = format!("update purchase_details set ingredient_id = $1, quantity_purchased= {}, buying_price_per_unit = {} where purchase_detail_id = $2  and deleted_at is null",purchase_detail.quantity_purchased, purchase_detail.buying_price_per_unit);
+        transaction.execute(&purchase_details_update_query, &[&purchase_detail.ingredient_id, &purchase_detail.purchase_detail_id])
             .await?;
-        let ingredients_update_query = format!("update ingredients SET stock_quantity = stock_quantity + {} WHERE ingredient_id = $1 AND deleted_at IS NULL",data.quantity_purchased);
+        let ingredients_update_query = format!("update ingredients set stock_quantity = stock_quantity + 
+        ( {} - (
+        select quantity_purchased 
+        from purchase_details 
+        where purchase_detail_id = $1) ) where ingredient_id = $2 and deleted_at is null",purchase_detail.quantity_purchased);
         transaction.execute(&ingredients_update_query,
-        &[&data.ingredient_id],
+        &[&purchase_detail.purchase_detail_id,&purchase_detail.ingredient_id],
     )
     .await?;
     }
