@@ -1,4 +1,4 @@
-use chrono::NaiveDateTime;
+use chrono::{NaiveDate, NaiveDateTime};
 use serde::{Deserialize, Serialize};
 use tokio_postgres::{types::ToSql, Client, Error};
 
@@ -122,7 +122,7 @@ pub async fn get_purchases(
 #[derive(Debug, Deserialize)]
 pub struct AddPurchaseRequest {
     pub total_cost: f64,
-    pub purchase_date: NaiveDateTime,
+    pub purchase_date: NaiveDate,
     pub shop_id: i32,
     pub purchase_details: Vec<AddPurchaseDetailRequest>,
 }
@@ -138,7 +138,7 @@ pub struct AddPurchaseDetailRequest {
 #[derive(Debug, Deserialize)]
 pub struct UpdatePurchaseRequest {
     pub total_cost: f64,
-    pub purchase_date: NaiveDateTime,
+    pub purchase_date: NaiveDate,
     pub shop_id: i32,
     pub purchase_details: Vec<UpdatePurchaseDetailRequest>,
 }
@@ -157,11 +157,11 @@ pub async fn add_purchase(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let transaction = client.transaction().await?;
 
-   let purchase_insert_query = format!("insert into purchases (total_cost,purchase_date,shop_id) values ({},$1,$2)  RETURNING purchase_id",data.total_cost);
+   let purchase_insert_query = format!("insert into purchases (total_cost,purchase_date,shop_id) values ({},'{}',$1)  RETURNING purchase_id",data.total_cost,data.purchase_date.to_string());
    let purchase_id: i32 = transaction
    .query_one(
     &purchase_insert_query,
-       &[&data.purchase_date,  &data.shop_id ],
+       &[&data.shop_id ],
    )
    .await?
    .get("purchase_id"); 
@@ -241,11 +241,10 @@ pub async fn update_purchase(
     client: &mut Client,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let transaction = client.transaction().await?;
-    let query = format!("update purchases set total_cost = {}, purchase_date = $1, shop_id = $2 where purchase_id = $3 and deleted_at is null",data.total_cost);
+    let query = format!("update purchases set total_cost = {}, purchase_date = '{}', shop_id = $1 where purchase_id = $2 and deleted_at is null",data.total_cost,data.purchase_date);
     transaction.execute(
             &query,
             &[
-                &data.purchase_date,
                 &data.shop_id,
                 &purchase_id,
             ],
@@ -289,3 +288,30 @@ pub async fn delete_purchase(
     .await?;
     Ok(())
 }
+
+
+
+// pub async fn get_purchasedetails_by_id(purchase_id: i32,client: &mut Client,) -> Option<Purchase> {
+
+//     let query = "select p.purchase_id,,pd.purchase_detail_id,pd.ingredient_id,pd.quantity_purchased
+//     from purchases p join purchase_details pd on p.purchase_id = pd.purchase_id
+//     where pd.purchase_id = $1 and p.deleted_at is null and pd.deleted_at is null";
+
+//     let rows = client.query(query, &[&purchase_id]).await;
+
+//     match rows {
+//         Ok(rows) => {
+//             for row in rows {
+//                 // Access the columns of each row as needed
+//                 let column1: i32 = row.get("column1");
+//                 let column2: String = row.get("column2");
+
+//                 // Do something with the data
+//                 println!("Column1: {}, Column2: {}", column1, column2);
+//             }
+//         }
+//         Err(err) => {
+//             eprintln!("Error executing query: {}", err);
+//         }
+//     }
+// }
